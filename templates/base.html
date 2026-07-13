@@ -428,8 +428,9 @@
     <footer>
         <span id="footer-content">
             <br>
-            {{_('proudly powered by %(dmoj)s', dmoj=safe('<a style="color: #808080" href="https://dmoj.ca"><b>DMOJ</b></a>'))}} |
-            {{_('follow us on %(github)s and %(facebook)s', github=safe('<a style="color: #808080" href="https://github.com/VNOI-Admin/OJ"><b>Github</b></a>'), facebook=safe('<a style="color: #808080" href="https://www.facebook.com/vnoi.wiki"><b>Facebook</b></a>'))}}
+            <b>FIT-HCMUS Online Judge</b> — Khoa Công nghệ Thông tin, Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM |
+            {{_('proudly powered by %(dmoj)s', dmoj=safe('<a style="color: #808080" href="https://dmoj.ca"><b>DMOJ</b></a> / <a style="color: #808080" href="https://github.com/VNOI-Admin/OJ"><b>vnoj</b></a>'))}} |
+            <a style="color: #808080" href="https://github.com/pbthai/OJ"><b>{{ _('Source code') }}</b></a>
             {% if misc_config.footer %}
                 {{ misc_config.footer|safe }} |
             {% endif %}
