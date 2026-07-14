@@ -348,12 +348,69 @@ class PolygonImporter:
         if self.interactive:
             print(*args, **kwargs)
 
+    def parse_signature_grader(self):
+        """Polygon IOI-style grader: resource .h co <assets><asset name="solution"/></assets>
+        (bien dich cung bai nop). Map sang DMOJ signature_grader:
+        entry = nguyen van file (chua main), header = phan khai bao truoc main
+        (force-include vao bai nop, giu nguyen ten file de #include cua thi sinh resolve dung).
+        """
+        graders = []
+        for file in self.root.findall('.//files/resources/file'):
+            assets = file.find('assets')
+            if assets is None:
+                continue
+            if not any(a.get('name') == 'solution' for a in assets.findall('asset')):
+                continue
+            for_types = file.get('for-types') or ''
+            if not for_types.startswith('cpp'):
+                raise ImportPolygonError(
+                    f'solution-asset resource {file.get("path")} is not for C++ (for-types={for_types})')
+            graders.append(file.get('path'))
+        if not graders:
+            return False
+        if len(graders) > 1:
+            raise ImportPolygonError(f'multiple solution-asset resources not supported: {graders}')
+
+        path = graders[0]
+        if not path.lower().endswith('.h'):
+            raise ImportPolygonError(f'only .h solution-asset resource is supported, got {path}')
+
+        content = self.package.read(path).decode('utf-8')
+        match = re.search(r'^[ \t]*(?:int|signed)\s+main\s*\(', content, re.MULTILINE)
+        if match is None:
+            raise ImportPolygonError(
+                f'cannot find main() in grader header {path} - please configure signature grading manually')
+
+        decl = content[:match.start()]
+        # can bang include guard bi cat mat #endif
+        opens = len(re.findall(r'^\s*#\s*if(?:n?def)?\b', decl, re.MULTILINE))
+        closes = len(re.findall(r'^\s*#\s*endif\b', decl, re.MULTILINE))
+        decl += '\n' + '#endif\n' * max(0, opens - closes)
+
+        header_name = os.path.basename(path)
+        self.meta['grader'] = 'signature'
+        self.meta['custom_grader'] = os.path.join(self.meta['tmp_dir'].name, 'grader_entry.cpp')
+        with open(self.meta['custom_grader'], 'w') as f:
+            f.write(content)
+        self.meta['custom_header'] = os.path.join(self.meta['tmp_dir'].name, header_name)
+        with open(self.meta['custom_header'], 'w') as f:
+            f.write(decl)
+        self.log(f'Found grader header {header_name}. Use signature grader '
+                 f'(entry=grader_entry.cpp, header={header_name}).')
+        return True
+
     def parse_assets(self):
+        # Parse IOI-style signature grader (resource compiled with the solution)
+        has_signature = self.parse_signature_grader()
+
         # Parse interactor
         interactor = self.root.find('.//interactor')
+        if interactor is not None and has_signature:
+            raise ImportPolygonError('both interactor and solution-asset grader found - not supported')
         if interactor is None:
-            self.log('Use standard grader.')
-            self.meta['grader'] = 'standard'
+            if not has_signature:
+                self.log('Use standard grader.')
+                self.meta['grader'] = 'standard'
         else:
             self.log('Found interactor. Use interactive grader.')
             self.meta['grader'] = 'interactive'
@@ -901,6 +958,11 @@ class PolygonImporter:
         if 'custom_grader' in self.meta:
             with open(self.meta['custom_grader'], 'rb') as f:
                 problem_data.custom_grader = File(f)
+                problem_data.save()
+
+        if 'custom_header' in self.meta:
+            with open(self.meta['custom_header'], 'rb') as f:
+                problem_data.custom_header = File(f)
                 problem_data.save()
 
         ProblemTestCase.objects.filter(dataset=problem).delete()
