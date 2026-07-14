@@ -686,6 +686,15 @@ class PolygonImporter:
                 self.meta['grader_args']['io_input_file'] = io_input_file
                 self.meta['grader_args']['io_output_file'] = io_output_file
 
+            # Polygon run-count=N: output luot i lam input luot i+1,
+            # checker cham output luot cuoi (vd bai giao tiep 2 pha ALICE/BOB).
+            run_count = int(judging.get('run-count') or 1)
+            if run_count > 1:
+                if self.meta['grader'] == 'interactive':
+                    raise ImportPolygonError('run-count > 1 with interactor is not supported')
+                self.log(f'Found run-count={run_count}. Use run-multi custom judge.')
+                self.meta['grader_args']['run_count'] = run_count
+
     def parse_statements(self):
         # Set default values
         self.meta['name'] = ''
