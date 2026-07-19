@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>ICPC Resolver — FIT-HCMUS</title>
+<style>
+  :root{--bg:#0b1020;--fg:#e8ecf5;--dim:#8b96ad;--line:#1e2740;
+        --ac:#1f9d55;--acbg:#123d26;--wa:#b0344a;--wabg:#3a1420;--pend:#c9a227;--pendbg:#3d3210;
+        --hi:#0c488f;--gold:#d4af37;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow:hidden}
+  header{display:flex;align-items:center;gap:16px;padding:10px 18px;border-bottom:1px solid var(--line)}
+  header h1{font-size:17px;margin:0;font-weight:600}
+  header .sub{color:var(--dim);font-size:13px}
+  header .spacer{flex:1}
+  .pill{background:#16203a;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px}
+  #board{position:relative;height:calc(100vh - 96px);overflow:hidden}
+  .row{position:absolute;left:0;right:0;height:44px;display:flex;align-items:center;gap:10px;
+       padding:0 18px;transition:transform .55s cubic-bezier(.22,.61,.36,1),background .3s;
+       border-bottom:1px solid rgba(255,255,255,.04)}
+  .row.cur{background:linear-gradient(90deg,rgba(12,72,143,.55),rgba(12,72,143,.12))}
+  .row.done{opacity:.92}
+  .rank{width:44px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums;font-size:16px}
+  .row.medal .rank{color:var(--gold);font-weight:700}
+  .team{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .org{color:var(--dim);font-weight:400;font-size:12px;margin-left:8px}
+  .tot{width:38px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;font-size:17px}
+  .pen{width:64px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums;font-size:13px}
+  .cells{display:flex;gap:5px;margin-left:14px}
+  .c{width:38px;height:28px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+     font-size:12px;font-weight:600;border:1px solid transparent;font-variant-numeric:tabular-nums}
+  .c.none{background:#141b30;color:#3f4a63}
+  .c.ac{background:var(--acbg);color:#7ee2a8;border-color:var(--ac)}
+  .c.wa{background:var(--wabg);color:#ef8ea0;border-color:var(--wa)}
+  .c.pending{background:var(--pendbg);color:#ffd86b;border-color:var(--pend);animation:pulse 1s infinite}
+  .c.flash{animation:flash .5s}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  @keyframes flash{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+  footer{position:fixed;bottom:0;left:0;right:0;height:52px;display:flex;align-items:center;gap:14px;
+         padding:0 18px;border-top:1px solid var(--line);background:#080d1a;font-size:13px;color:var(--dim)}
+  kbd{background:#1b2340;border:1px solid #2b3454;border-radius:4px;padding:1px 6px;color:#cfd7e6;font-size:12px}
+  #prog{flex:1;height:5px;background:#151c2f;border-radius:3px;overflow:hidden}
+  #prog>i{display:block;height:100%;background:var(--hi);width:0;transition:width .3s}
+  #done{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+        background:rgba(4,8,18,.9);z-index:9}
+  #done h2{font-size:40px;margin:0 0 8px}
+  #done .who{font-size:26px;color:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="cname"></h1>
+  <span class="sub" id="csub"></span>
+  <span class="spacer"></span>
+  <span class="pill" id="status">Sẵn sàng</span>
+</header>
+<div id="board"></div>
+<footer>
+  <span><kbd>Space</kbd>/<kbd>→</kbd> mở tiếp</span>
+  <span><kbd>←</kbd> lùi</span>
+  <span><kbd>A</kbd> tự chạy</span>
+  <span><kbd>F</kbd> toàn màn hình</span>
+  <span><kbd>R</kbd> làm lại</span>
+  <div id="prog"><i></i></div>
+  <span id="cnt"></span>
+</footer>
+<div id="done"><h2>🏆 Vô địch</h2><div class="who" id="champ"></div></div>
+<script>
+const DATA = __RESOLVER_DATA__;
+const PEN = DATA.contest.penalty_per_wrong || 20;
+const PROBS = DATA.contest.problems;
+const ROW_H = 44;
+
+// ---- trạng thái 1 ô theo số bước đã mở ----
+function cellState(cell, revealed) {
+  if (!cell.pending) return {solved: cell.final.solved, tries: cell.final.tries, min: cell.final.minutes};
+  if (revealed)      return {solved: cell.final.solved, tries: cell.final.tries, min: cell.final.minutes};
+  return {solved: cell.frozen.solved, tries: cell.frozen.tries, min: cell.final.minutes, hidden: true};
+}
+function teamTotals(t, revealedSet, ti) {
+  let solved = 0, pen = 0;
+  t.cells.forEach((c, ci) => {
+    const st = cellState(c, revealedSet.has(ti + ':' + ci));
+    if (st.solved) { solved++; pen += (st.min || 0) + PEN * Math.max(0, st.tries - 1); }
+  });
+  return {solved, pen};
+}
+function sortBoard(rows) {
+  return rows.slice().sort((a, b) =>
+    b.solved - a.solved || a.pen - b.pen || a.t.name.localeCompare(b.t.name));
+}
+function boardAt(n) {
+  const revealed = new Set(STEPS.slice(0, n).map(s => s.key));
+  const rows = DATA.teams.map((t, ti) => {
+    const tot = teamTotals(t, revealed, ti);
+    return {t, ti, solved: tot.solved, pen: tot.pen, revealed};
+  });
+  const sorted = sortBoard(rows);
+  let rank = 0, prev = null;
+  sorted.forEach((r, i) => {
+    const k = r.solved + ':' + r.pen;
+    if (k !== prev) { rank = i + 1; prev = k; }
+    r.rank = rank;
+  });
+  return sorted;
+}
+
+// ---- dựng trước chuỗi bước: mở từ hạng chót lên ----
+const STEPS = (function () {
+  const steps = [];
+  const revealed = new Set();
+  const pend = DATA.teams.map((t, ti) =>
+    t.cells.map((c, ci) => c.pending ? ci : -1).filter(ci => ci >= 0));
+  const totalPending = pend.reduce((s, a) => s + a.length, 0);
+  let guard = 0;
+  let pointer = DATA.teams.length - 1;
+  while (pointer >= 0 && steps.length < totalPending && guard++ < 100000) {
+    const rows = (function () {
+      const rs = DATA.teams.map((t, ti) => {
+        const tot = teamTotals(t, revealed, ti);
+        return {t, ti, solved: tot.solved, pen: tot.pen};
+      });
+      return sortBoard(rs);
+    })();
+    const row = rows[pointer];
+    const remaining = pend[row.ti].filter(ci => !revealed.has(row.ti + ':' + ci));
+    if (!remaining.length) { pointer--; continue; }
+    const ci = remaining[0];
+    const key = row.ti + ':' + ci;
+    revealed.add(key);
+    steps.push({key, ti: row.ti, ci});
+  }
+  return steps;
+})();
+
+let step = 0, auto = null;
+const board = document.getElementById('board');
+const nodes = new Map();
+
+document.getElementById('cname').textContent = DATA.contest.name;
+document.getElementById('csub').textContent =
+  DATA.teams.length + ' đội · ' + PROBS.length + ' bài · băng ' +
+  (DATA.contest.frozen_minutes || 0) + ' phút · phạt ' + PEN + ' phút/lần sai';
+
+function render(animate) {
+  const rows = boardAt(step);
+  const curKey = step < STEPS.length ? STEPS[step].ti : null;
+  rows.forEach((r, i) => {
+    let el = nodes.get(r.ti);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'row';
+      el.innerHTML = '<div class="rank"></div><div class="team"></div>' +
+        '<div class="tot"></div><div class="pen"></div><div class="cells"></div>';
+      board.appendChild(el);
+      nodes.set(r.ti, el);
+      const cs = el.querySelector('.cells');
+      PROBS.forEach(() => cs.appendChild(document.createElement('div')));
+    }
+    el.style.transform = 'translateY(' + (i * ROW_H) + 'px)';
+    el.classList.toggle('cur', r.ti === curKey);
+    el.classList.toggle('medal', r.rank <= 3 && step >= STEPS.length);
+    el.querySelector('.rank').textContent = r.rank;
+    el.querySelector('.team').innerHTML =
+      esc(r.t.name) + (r.t.org ? '<span class="org">' + esc(r.t.org) + '</span>' : '');
+    el.querySelector('.tot').textContent = r.solved;
+    el.querySelector('.pen').textContent = r.pen;
+    const cs = el.querySelector('.cells').children;
+    r.t.cells.forEach((c, ci) => {
+      const st = cellState(c, r.revealed.has(r.ti + ':' + ci));
+      const node = cs[ci];
+      let cls = 'c none', txt = PROBS[ci].label;
+      if (st.hidden) { cls = 'c pending'; txt = '? ' + (c.final.tries || ''); }
+      else if (st.solved) { cls = 'c ac'; txt = '+' + (st.tries > 1 ? st.tries - 1 : ''); }
+      else if (st.tries) { cls = 'c wa'; txt = '−' + st.tries; }
+      const just = STEPS[step - 1];
+      const isJust = animate && just && r.ti === just.ti && ci === just.ci;
+      node.className = cls + (isJust ? ' flash' : '');
+      node.textContent = txt;
+    });
+  });
+  board.style.height = (rows.length * ROW_H) + 'px';
+  const pct = STEPS.length ? (step / STEPS.length * 100) : 100;
+  document.querySelector('#prog>i').style.width = pct + '%';
+  document.getElementById('cnt').textContent = step + '/' + STEPS.length;
+  document.getElementById('status').textContent =
+    step >= STEPS.length ? 'Đã mở băng xong' : 'Đang mở băng…';
+  if (step >= STEPS.length && STEPS.length) showChampion(rows);
+  // giữ đội đang mở trong tầm nhìn
+  const cur = rows.findIndex(r => r.ti === curKey);
+  if (cur >= 0) board.scrollTop = Math.max(0, (cur - 6) * ROW_H);
+}
+function showChampion(rows) {
+  const d = document.getElementById('done');
+  document.getElementById('champ').textContent = rows[0] ? rows[0].t.name : '';
+  d.style.display = 'flex';
+  setTimeout(() => { d.style.display = 'none'; }, 3500);
+}
+function esc(s) { return String(s).replace(/[&<>]/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[m])); }
+
+function next() { if (step < STEPS.length) { step++; render(true); } else stopAuto(); }
+function back() { if (step > 0) { step--; render(false); } }
+function stopAuto() { if (auto) { clearInterval(auto); auto = null; } }
+function toggleAuto() {
+  if (auto) return stopAuto();
+  auto = setInterval(next, 1100);
+}
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.key === 'ArrowRight') { e.preventDefault(); next(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); back(); }
+  else if (e.key.toLowerCase() === 'a') toggleAuto();
+  else if (e.key.toLowerCase() === 'f') {
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+  } else if (e.key.toLowerCase() === 'r') { stopAuto(); step = 0; render(false); }
+});
+board.addEventListener('click', next);
+render(false);
+</script>
+</body>
+</html>
