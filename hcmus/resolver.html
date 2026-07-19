@@ -15,7 +15,10 @@
   header .sub{color:var(--dim);font-size:13px}
   header .spacer{flex:1}
   .pill{background:#16203a;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px}
-  #board{position:relative;height:calc(100vh - 96px);overflow:hidden}
+  #board{height:calc(100vh - 96px);overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth}
+  #board::-webkit-scrollbar{width:10px}
+  #board::-webkit-scrollbar-thumb{background:#243154;border-radius:5px}
+  #rows{position:relative}
   .row{position:absolute;left:0;right:0;height:44px;display:flex;align-items:center;gap:10px;
        padding:0 18px;transition:transform .55s cubic-bezier(.22,.61,.36,1),background .3s;
        border-bottom:1px solid rgba(255,255,255,.04)}
@@ -55,7 +58,7 @@
   <span class="spacer"></span>
   <span class="pill" id="status">Sẵn sàng</span>
 </header>
-<div id="board"></div>
+<div id="board"><div id="rows"></div></div>
 <footer>
   <span><kbd>Space</kbd>/<kbd>→</kbd> mở tiếp</span>
   <span><kbd>←</kbd> lùi</span>
@@ -136,6 +139,7 @@ const STEPS = (function () {
 
 let step = 0, auto = null;
 const board = document.getElementById('board');
+const rowsEl = document.getElementById('rows');
 const nodes = new Map();
 
 document.getElementById('cname').textContent = DATA.contest.name;
@@ -153,7 +157,7 @@ function render(animate) {
       el.className = 'row';
       el.innerHTML = '<div class="rank"></div><div class="team"></div>' +
         '<div class="tot"></div><div class="pen"></div><div class="cells"></div>';
-      board.appendChild(el);
+      rowsEl.appendChild(el);
       nodes.set(r.ti, el);
       const cs = el.querySelector('.cells');
       PROBS.forEach(() => cs.appendChild(document.createElement('div')));
@@ -180,16 +184,22 @@ function render(animate) {
       node.textContent = txt;
     });
   });
-  board.style.height = (rows.length * ROW_H) + 'px';
+  rowsEl.style.height = (rows.length * ROW_H) + 'px';
   const pct = STEPS.length ? (step / STEPS.length * 100) : 100;
   document.querySelector('#prog>i').style.width = pct + '%';
   document.getElementById('cnt').textContent = step + '/' + STEPS.length;
   document.getElementById('status').textContent =
     step >= STEPS.length ? 'Đã mở băng xong' : 'Đang mở băng…';
   if (step >= STEPS.length && STEPS.length) showChampion(rows);
-  // giữ đội đang mở trong tầm nhìn
+  // Giữ đội đang mở trong tầm nhìn, nhưng KHÔNG giành quyền cuộn của người dùng:
+  // chỉ tự cuộn khi hàng đó đã ra ngoài khung.
   const cur = rows.findIndex(r => r.ti === curKey);
-  if (cur >= 0) board.scrollTop = Math.max(0, (cur - 6) * ROW_H);
+  if (cur >= 0) {
+    const y = cur * ROW_H, top = board.scrollTop, h = board.clientHeight;
+    if (y < top + ROW_H || y > top + h - ROW_H * 2) {
+      board.scrollTop = Math.max(0, y - h / 2);
+    }
+  }
 }
 function showChampion(rows) {
   const d = document.getElementById('done');
