@@ -239,6 +239,9 @@
                 <li class="home-nav-element"><span class="nav-divider"></span></li>
                 <li class="home-menu-item"><a href="{{ url('home') }}" class="nav-home">{{ _('Home') }}</a></li>
                 {% for node in mptt_tree(nav_bar) recursive %}
+                    {# FIT-HCMUS: mục có key bắt đầu bằng "adm" chỉ hiện với staff #}
+                    {% if node.key.startswith('adm') and not (request.user.is_authenticated and request.user.is_staff) %}
+                    {% else %}
                     <li>
                         <a href="{{ node.path }}" class="nav-{{ node.key }}{% if node.key in nav_tab %} active{% endif %}">
                             {{ _(node.label) }}
@@ -250,6 +253,7 @@
                             {% if children %}<ul>{{ loop(children) }}</ul>{% endif %}
                         {% endwith %}
                     </li>
+                    {% endif %}
                 {% endfor %}
             {% else %}
                 {% macro make_navbar_item(key, url, text) %}
