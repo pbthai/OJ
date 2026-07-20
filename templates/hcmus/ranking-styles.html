@@ -1,0 +1,26 @@
+{# CSS dùng chung cho bảng xếp hạng. Tách ra file riêng vì khối {% block media %}
+   KHÔNG chạy khi template được include vào giữa thân một trang khác (trang chủ). #}
+<style>
+    .rk-table { width: 100%; border-collapse: collapse; }
+    .rk-table th, .rk-table td { padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: center; }
+    .rk-table th.rk-left, .rk-table td.rk-left { text-align: left; }
+    .rk-rank { width: 3em; font-weight: bold; }
+    .rk-total { font-weight: bold; font-size: 1.05em; }
+    .rk-absent { color: #c0392b; }
+    .rk-pen { color: #888; font-size: .85em; }
+    .rk-note { background: rgba(200,150,0,.12); border-left: 3px solid #c89600;
+               padding: 8px 12px; margin-bottom: 14px; }
+    .rk-formula { color: #666; font-size: .9em; margin-bottom: 14px; }
+    .rk-scroll { overflow-x: auto; }
+    .rk-honour { background: rgba(255, 200, 0, .10); }
+    .rk-honour td { font-weight: 600; }
+    .rk-medal { font-size: 1.15em; }
+    .rk-gold   { color: #d4af37; }
+    .rk-silver { color: #9aa4ad; }
+    .rk-bronze { color: #b06a30; }
+    .rk-setter { color: #2e7d32; }
+    .rk-cut td { border-bottom: 2px solid #c89600; }
+    @media (prefers-color-scheme: dark) {
+        .rk-table th, .rk-table td { border-bottom-color: #333; }
+    }
+</style>

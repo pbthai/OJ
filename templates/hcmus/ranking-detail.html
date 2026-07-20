@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block media %}
+{% include "hcmus/ranking-styles.html" %}
+{% endblock %}
+
+{% block body %}
+    {% if can_edit %}
+        <p style="text-align: right">
+            <a href="{{ url('admin:hcmus_ranking_change', ranking.id) }}" class="button">{{ _('Edit') }}</a>
+        </p>
+    {% endif %}
+
+    {% if ranking.description %}
+        <div>{{ ranking.description|markdown('default')|reference|str|safe }}</div>
+    {% endif %}
+
+    {% if mixed_units %}
+        <div class="rk-note">
+            {{ _('The selected contests do not all use the same format. Penalty is counted in minutes for ICPC contests but in seconds for others, so the tie-break column mixes units and is not meaningful here.') }}
+        </div>
+    {% endif %}
+
+    <p class="rk-formula">
+        {% trans %}Score is the sum of each contest score multiplied by its weight. A team that did not take part in a contest scores{% endtrans %}
+        <b>{{ ranking.absent_score|floatformat }}</b>
+        {% trans %}for it, before the weight is applied. Ties are broken by the lower total penalty.{% endtrans %}
+        {% if ranking.hall_of_fame %}
+            {% trans count=ranking.hall_of_fame %}The top {{ count }} are highlighted.{% endtrans %}
+        {% endif %}
+    </p>
+
+    {% include "hcmus/ranking-table.html" %}
+{% endblock %}

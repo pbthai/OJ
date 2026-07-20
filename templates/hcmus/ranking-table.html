@@ -1,0 +1,61 @@
+{# Bảng xếp hạng, dùng chung cho trang chi tiết và trang chủ.
+   Biến: rows, ranking_contests, ranking.
+   Tuỳ chọn: limit (số hàng, 0/None = tất cả), compact (True = bỏ các cột contest). #}
+{% set limit = limit|default(0) %}
+{% set compact = compact|default(false) %}
+{% if not rows %}
+    <p>{{ _('No team has been added to this ranking yet.') }}</p>
+{% else %}
+<div class="rk-scroll">
+<table class="rk-table">
+    <thead>
+        <tr>
+            <th class="rk-rank">#</th>
+            <th class="rk-left">{{ _('Team') }}</th>
+            <th>{{ _('Total') }}</th>
+            <th>{{ _('Penalty') }}</th>
+            {% if not compact %}{% for rc in ranking_contests %}
+                <th>
+                    <a href="{{ url('contest_view', rc.contest.key) }}">{{ rc.contest.name }}</a>
+                    <br><span class="rk-pen">×{{ rc.weight|floatformat }}</span>
+                </th>
+            {% endfor %}{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+    {% for row in (rows[:limit] if limit else rows) %}
+        <tr class="{% if row.honour %}rk-honour{% endif %} {% if ranking.hall_of_fame and row.honour and not loop.last and not rows[loop.index].honour %}rk-cut{% endif %}">
+            <td class="rk-rank">
+                {% if row.medal == 'gold' %}<i class="fa fa-trophy rk-medal rk-gold" title="{{ _('1st place') }}"></i>
+                {% elif row.medal == 'silver' %}<i class="fa fa-trophy rk-medal rk-silver" title="{{ _('2nd place') }}"></i>
+                {% elif row.medal == 'bronze' %}<i class="fa fa-trophy rk-medal rk-bronze" title="{{ _('3rd place') }}"></i>
+                {% elif row.honour %}<i class="fa fa-star rk-medal" style="color:#c89600"></i>
+                {% endif %}
+                {{ row.rank }}
+            </td>
+            <td class="rk-left">
+                <a href="{{ url('user_page', row.username) }}">{{ row.name }}</a>
+                {% if row.org %}<span class="rk-pen">{{ row.org }}</span>{% endif %}
+            </td>
+            <td class="rk-total">{{ row.total|floatformat }}</td>
+            <td class="rk-pen">{{ row.penalty }}</td>
+            {% if not compact %}{% for cell in row.cells %}
+                <td>
+                    {% if cell.setter %}
+                        <span class="rk-setter">{{ cell.weighted|floatformat }}</span>
+                        <br><span class="rk-pen rk-setter"><i class="fa fa-pencil"></i> {{ _('setter') }}</span>
+                    {% elif cell.participated %}
+                        {{ cell.weighted|floatformat }}
+                        <br><span class="rk-pen">{{ cell.score|floatformat }} / {{ cell.penalty }}</span>
+                    {% else %}
+                        <span class="rk-absent">{{ cell.weighted|floatformat }}</span>
+                        <br><span class="rk-pen">{{ _('absent') }}</span>
+                    {% endif %}
+                </td>
+            {% endfor %}{% endif %}
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}

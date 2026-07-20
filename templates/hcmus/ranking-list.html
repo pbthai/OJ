@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block body %}
+    {% if can_create %}
+        <p style="text-align: right">
+            <a href="{{ url('admin:hcmus_ranking_add') }}" class="button">{{ _('Create ranking') }}</a>
+        </p>
+    {% endif %}
+
+    {% if not rankings %}
+        <p>{{ _('There is no ranking to show yet.') }}</p>
+    {% else %}
+        <table class="table striped">
+            <thead>
+                <tr>
+                    <th>{{ _('Name') }}</th>
+                    <th>{{ _('Contests') }}</th>
+                    <th>{{ _('Teams') }}</th>
+                    <th>{{ _('Visibility') }}</th>
+                    <th>{{ _('Last modified') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in rankings %}
+                <tr>
+                    <td><a href="{{ url('hcmus_ranking_detail', r.slug) }}"><b>{{ r.name }}</b></a></td>
+                    <td>{{ r.contests.count() }}</td>
+                    <td>{{ r.teams.count() }}</td>
+                    <td>
+                        {% if r.visibility == 'F' %}<i class="fa fa-star" title="{{ _('Featured') }}"></i> {% endif %}
+                        {{ r.get_visibility_display().split('—')[0] }}
+                    </td>
+                    <td>{{ relative_time(r.modified) }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

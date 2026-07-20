@@ -1,0 +1,16 @@
+{# Khối "nổi bật" trên sidebar trang chủ. Chỉ hiện khi có bảng visibility=F. #}
+{% if featured_rankings %}
+    <div class="blog-sidebox sidebox">
+        <h3>{{ _('Team rankings') }} <i class="fa fa-trophy"></i></h3>
+        <div class="sidebox-content">
+            <ul class="problem-list">
+            {% for r in featured_rankings %}
+                <li>
+                    <a href="{{ url('hcmus_ranking_detail', r.slug) }}">{{ r.name }}</a>
+                    <br><span class="time">{{ r.teams.count() }} {{ _('teams') }}</span>
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endif %}
