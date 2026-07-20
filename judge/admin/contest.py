@@ -149,7 +149,8 @@ class ContestAdmin(AdminFastPaginationMixin, NoBatchDeleteMixin, SortableAdminBa
     fieldsets = (
         (None, {'fields': ('key', 'name', 'authors', 'curators', 'testers')}),
         (_('Settings'), {'fields': ('is_visible', 'use_clarifications', 'push_announcements', 'disallow_virtual',
-                                    'hide_problem_tags', 'hide_problem_authors', 'show_short_display',
+                                    'hide_problem_tags', 'hide_problem_authors', 'hide_problem_statements',
+                                    'show_short_display',
                                     'run_pretests_only', 'locked_after', 'scoreboard_visibility',
                                     'ranking_access_code', 'scoreboard_cache_timeout', 'show_submission_list',
                                     'points_precision', 'banned_judges')}),

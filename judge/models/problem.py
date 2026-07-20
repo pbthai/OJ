@@ -279,6 +279,29 @@ class Problem(models.Model):
             return True
         return False
 
+    def statement_hidden_for(self, user):
+        """Đề bài này có đang bị che với `user` không (xem Contest.statements_hidden_for).
+
+        Xét MỌI contest chứa bài, không chỉ contest user đang dự: đã ẩn đề thì bài
+        đó không được đọc qua bất kỳ đường nào, kể cả khi bài còn nằm trong một
+        contest lưu trữ công khai khác. Hệ quả cần biết: một bài dùng lại ở nhiều
+        contest sẽ bị ẩn chừng nào CÒN một contest bật cờ — dùng `./oj exam <key>
+        --show` để biết contest nào đang giữ.
+        """
+        # Nhớ theo instance: template gọi hàm này vài lần cho mỗi bài (chặn khối
+        # PDF nhúng, rồi chặn phần đề), và trang /contest/<key>/all render cả chục
+        # bài một lượt.
+        cached = getattr(self, '_statement_hidden_cache', None)
+        if cached is not None and cached[0] == getattr(user, 'id', None):
+            return cached[1]
+        # Không lọc theo end_time: cờ có hiệu lực tới khi người quản trị bỏ tick.
+        contests = (self.contests
+                    .filter(contest__hide_problem_statements=True)
+                    .select_related('contest'))
+        result = any(cp.contest.statements_hidden_for(user) for cp in contests)
+        self._statement_hidden_cache = (getattr(user, 'id', None), result)
+        return result
+
     def is_accessible_by(self, user, skip_contest_problem_check=False):
         # If we don't want to check if the user is in a contest containing that problem.
         if not skip_contest_problem_check and user.is_authenticated:

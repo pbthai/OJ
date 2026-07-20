@@ -142,6 +142,11 @@ class Contest(models.Model):
     hide_problem_authors = models.BooleanField(verbose_name=_('hide problem authors'),
                                                help_text=_('Whether problem authors should be hidden by default.'),
                                                default=False)
+    hide_problem_statements = models.BooleanField(
+        verbose_name=_('hide problem statements'),
+        help_text=_('For paper-based exams. Contest editors still see the statement, and nothing is '
+                    'deleted. Stays on until you untick it.'),
+        default=False)
     run_pretests_only = models.BooleanField(verbose_name=_('run pretests only'),
                                             help_text=_('Whether judges should grade pretests only, versus all '
                                                         'testcases. Commonly set during a contest, then unset '
@@ -520,6 +525,23 @@ class Contest(models.Model):
             return True
 
         return False
+
+    def statements_hidden_for(self, user):
+        """Có phải che đề bài của contest này với `user` không (thi trên giấy).
+
+        Chỉ đổi HIỂN THỊ — Problem.description vẫn nguyên vẹn trong DB, khác hẳn
+        cách cũ là ghi đè description rồi lưu bản gốc ra file JSON.
+
+        Cờ có hiệu lực CHO TỚI KHI người quản trị tự bỏ tick; contest kết thúc
+        KHÔNG tự mở đề. Đây là lựa chọn có chủ ý: việc mở đề là quyết định của
+        người ra đề (có thể muốn giữ kín để dùng lại kỳ sau), không nên xảy ra
+        tự động sau lưng họ.
+        """
+        if not self.hide_problem_statements:
+            return False
+        # is_editable_by an toàn với người chưa đăng nhập: has_perm trả False nên
+        # nhánh `and user.profile` không bao giờ được chạm tới.
+        return not self.is_editable_by(user)
 
     @classmethod
     def get_public_contests(cls):

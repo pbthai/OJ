@@ -859,6 +859,7 @@ class ContestForm(ModelForm):
             'use_clarifications',
             'hide_problem_tags',
             'hide_problem_authors',
+            'hide_problem_statements',
             'show_short_display',
             'scoreboard_visibility',
             'format_name',

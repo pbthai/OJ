@@ -38,6 +38,7 @@ from judge.utils.opengraph import generate_opengraph
 from judge.utils.pdfoid import PDF_RENDERING_ENABLED, render_pdf
 from judge.utils.problems import hot_problems, user_attempted_ids, \
     user_completed_ids
+from judge.utils.statement import apply_statement_hiding, hidden_statement_markdown
 from judge.utils.strings import safe_float_or_none, safe_int_or_none
 from judge.utils.tickets import own_ticket_filter
 from judge.utils.views import QueryStringSortMixin, SingleObjectFormView, TitleMixin, add_file_response, generic_message
@@ -167,6 +168,9 @@ class ProblemRaw(ProblemMixin, TitleMixin, TemplateResponseMixin, SingleObjectMi
         context['problem_name'] = self.object.name if trans is None else trans.name
         context['url'] = self.request.build_absolute_uri()
         context['description'] = self.object.description if trans is None else trans.description
+        # /problem/<code>/raw là đường rò độc lập với trang chi tiết (trang chi tiết
+        # còn nhúng chính nó qua iframe) — phải che ở đây nữa.
+        apply_statement_hiding(context, self.object, self.request.user)
         return context
 
     def get(self, request, *args, **kwargs):
@@ -448,6 +452,10 @@ class ProblemDetail(ProblemMixin, SolvedProblemMixin, ProblemSubmitMixin, Commen
             context['description'] = translation.description
             context['translated'] = True
 
+        # Đặt trước generate_opengraph: meta_description/og lấy từ context['description'],
+        # che sau thì thẻ <head> vẫn lộ 500 ký tự đầu của đề.
+        apply_statement_hiding(context, self.object, user)
+
         if not self.object.og_image or not self.object.summary:
             metadata = generate_opengraph('generated-meta-problem:%s:%d' % (context['language'], self.object.id),
                                           context['description'], 'problem')
@@ -515,7 +523,9 @@ class ProblemPdfView(ProblemMixin, SingleObjectMixin, View):
                     html=get_template('problem/raw.html').render({
                         'problem': problem,
                         'problem_name': problem_name,
-                        'description': trans.description if trans else problem.description,
+                        'description': (hidden_statement_markdown()
+                                        if problem.statement_hidden_for(request.user)
+                                        else (trans.description if trans else problem.description)),
                         'url': request.build_absolute_uri(),
                     }).replace('"//', '"https://').replace("'//", "'https://"),
                     title=problem_name,
