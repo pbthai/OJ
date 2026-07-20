@@ -451,3 +451,69 @@ def _permset_perms_changed(sender, instance, action, **kwargs):
 def _permset_includes_changed(sender, instance, action, **kwargs):
     if action.startswith('post_'):
         PermSet.materialize_all()
+
+
+class JudgeSwitch(models.Model):
+    """Công tắc bật/tắt từng máy chấm, không cần SSH.
+
+    Web KHÔNG tự chạy docker. Nó chỉ ghi ý muốn ra một file spool; tiến trình
+    health_collector chạy dưới root đọc file đó rồi start/stop container tương ứng.
+    Cho tiến trình web quyền chạy docker (hoặc sudo) là biến một lỗ trong Django
+    thành lỗ root, nên ranh giới đặt ở đây: web nói MUỐN GÌ, root quyết định LÀM GÌ,
+    và root chỉ chấp nhận tên khớp ^judge[0-9]+$ nằm trong danh sách container nó tự
+    liệt kê được.
+    """
+    SPOOL = '/var/lib/oj-judges/desired.json'
+
+    name = models.CharField(max_length=50, unique=True, verbose_name=_('judge name'),
+                            help_text=_('Must match the container name, e.g. judge3'))
+    enabled = models.BooleanField(default=True, verbose_name=_('enabled'))
+    note = models.CharField(max_length=200, blank=True, verbose_name=_('note'))
+    changed_by = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name=_('last changed by'))
+    modified = models.DateTimeField(auto_now=True, verbose_name=_('last changed'))
+
+    class Meta:
+        verbose_name = _('judge switch')
+        verbose_name_plural = _('judge switches')
+        ordering = ['name']
+        permissions = (('control_judges', _('Turn judges on and off')),)
+
+    def __str__(self):
+        return f'{self.name} ({"bật" if self.enabled else "tắt"})'
+
+    @classmethod
+    def write_spool(cls):
+        """Ghi ý muốn ra file cho tiến trình root đọc. Ghi tạm rồi đổi tên để
+        tiến trình kia không đọc phải file dở dang."""
+        import json
+        import os
+        import tempfile
+        data = {'desired': {s.name: s.enabled for s in cls.objects.all()},
+                'ts': int(timezone.now().timestamp())}
+        d = os.path.dirname(cls.SPOOL)
+        try:
+            os.makedirs(d, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=d)
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, cls.SPOOL)
+            return True
+        except OSError:
+            return False
+
+    @classmethod
+    def sync_from_containers(cls, names):
+        """Tạo bản ghi cho container mới thấy lần đầu, mặc định là bật."""
+        have = set(cls.objects.values_list('name', flat=True))
+        new = [cls(name=n) for n in names if n not in have]
+        if new:
+            cls.objects.bulk_create(new)
+            cls.write_spool()
+        return len(new)
+
+
+@receiver([post_save, post_delete], sender=JudgeSwitch)
+def _judgeswitch_changed(sender, instance, **kwargs):
+    JudgeSwitch.write_spool()

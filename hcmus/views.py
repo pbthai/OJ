@@ -13,6 +13,7 @@ import os
 
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
+from django.core.exceptions import PermissionDenied
 from django.http import (FileResponse, Http404, HttpResponse,
                          HttpResponseBadRequest, JsonResponse)
 from django.middleware.csrf import get_token
@@ -20,9 +21,11 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_POST
 
 from hcmus import statement_pdf
-from hcmus.models import Ranking
+from hcmus.health import snapshot as health_snapshot
+from hcmus.models import JudgeSwitch, Ranking
 from hcmus.ranking import compute as compute_ranking
 from hcmus.tasks import build_contest_statement
 from judge.models import Contest, ContestParticipation
@@ -268,3 +271,35 @@ def ranking_detail(request, slug):
         'can_edit': obj.is_editable_by(request.user),
         'mixed_units': obj.mixed_penalty_units,
     })
+
+
+# ==========================================================================
+# Sức khoẻ hệ thống
+# ==========================================================================
+
+@staff_only
+def health_page(request):
+    return render(request, 'hcmus/health.html', {
+        'title': _('System health'),
+        'data': health_snapshot(),
+        'can_toggle': request.user.has_perm('hcmus.control_judges'),
+    })
+
+
+@staff_only
+def health_data(request):
+    """Endpoint cho trang tự làm mới. Trả JSON, không render lại cả trang."""
+    return JsonResponse(health_snapshot())
+
+
+@staff_only
+@require_POST
+def health_judge_toggle(request, name):
+    """Bật/tắt một máy chấm. Web chỉ ghi ý muốn; tiến trình root thi hành."""
+    if not request.user.has_perm('hcmus.control_judges'):
+        raise PermissionDenied()
+    sw = get_object_or_404(JudgeSwitch, name=name)
+    sw.enabled = request.POST.get('on') == '1'
+    sw.changed_by = request.profile if hasattr(request, 'profile') else None
+    sw.save()   # signal tự ghi spool
+    return JsonResponse({'name': sw.name, 'enabled': sw.enabled})

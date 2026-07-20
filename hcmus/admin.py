@@ -17,7 +17,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from hcmus.models import HomeSection, PermSet, Ranking, RankingContest
+from hcmus.models import HomeSection, JudgeSwitch, PermSet, Ranking, RankingContest
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -440,3 +440,30 @@ class PermSetAdmin(SortableAdminMixin, admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return self._root(request)
+
+
+@admin.register(JudgeSwitch)
+class JudgeSwitchAdmin(admin.ModelAdmin):
+    """Bật/tắt máy chấm. Thao tác chính nằm ở trang Sức khoẻ hệ thống; đây là chỗ
+    xem lại lịch sử và sửa ghi chú."""
+    list_display = ('name', 'enabled', 'note', 'changed_by', 'modified')
+    list_filter = ('enabled',)
+    readonly_fields = ('changed_by', 'modified')
+
+    def _may(self, request):
+        return request.user.is_active and request.user.has_perm('hcmus.control_judges')
+
+    def has_module_permission(self, request):
+        return self._may(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._may(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._may(request)
+
+    def has_add_permission(self, request):
+        return False        # bản ghi tự sinh từ container, không thêm tay
+
+    def has_delete_permission(self, request, obj=None):
+        return False
