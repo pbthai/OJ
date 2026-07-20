@@ -13,9 +13,20 @@ import os
 
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import (FileResponse, Http404, HttpResponse,
+                         HttpResponseBadRequest, JsonResponse)
+from django.middleware.csrf import get_token
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.translation import gettext as _
 
+from hcmus import statement_pdf
+from hcmus.models import Ranking
+from hcmus.ranking import compute as compute_ranking
+from hcmus.tasks import build_contest_statement
 from judge.models import Contest, ContestParticipation
+from judge.utils.celery import redirect_to_task_status
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 SNAPSHOT_DIR = getattr(settings, 'HCMUS_SNAPSHOT_DIR', os.path.join(BASE, 'snapshots'))
@@ -142,3 +153,118 @@ def resolver(request, contest_key):
     with open(os.path.join(BASE, 'resolver.html'), encoding='utf-8') as f:
         html = f.read()
     return HttpResponse(html.replace('__RESOLVER_DATA__', json.dumps(payload, ensure_ascii=False)))
+
+
+# ==========================================================================
+# Tải PDF đề bài trọn bộ của một contest
+# ==========================================================================
+
+@staff_only
+def statement_index(request):
+    """Form chọn contest + style. GET hiện form, POST đẩy việc sang celery."""
+    if request.method == 'POST':
+        return _statement_build(request)
+
+    rows = []
+    for c in Contest.objects.order_by('-start_time')[:40]:
+        n = c.contest_problems.count()
+        rows.append({
+            'key': c.key,
+            'name': c.name,
+            'date': timezone.localtime(c.start_time).strftime('%d/%m/%Y'),
+            'count': n,
+            'cached': os.path.exists(os.path.join(_pdf_cache(), f'{c.key}.pdf')),
+        })
+
+    payload = {
+        'contests': rows,
+        'styles': [{'name': k, 'desc': v} for k, v in statement_pdf.BUNDLED_STY.items()],
+        'default_sty': statement_pdf.DEFAULT_STY,
+    }
+    with open(os.path.join(BASE, 'statement.html'), encoding='utf-8') as f:
+        html = f.read()
+    # Trang này không đi qua template engine (xem ghi chú resolver.html) nên phải
+    # tự tiêm CSRF token, không có {% csrf_token %} để dùng.
+    html = html.replace('__CSRF_TOKEN__', get_token(request))
+    return HttpResponse(html.replace('__STATEMENT_DATA__',
+                                     json.dumps(payload, ensure_ascii=False)))
+
+
+def _pdf_cache():
+    from hcmus.tasks import cache_dir
+    return cache_dir()
+
+
+def _statement_build(request):
+    contest_key = (request.POST.get('contest') or '').strip()
+    if not Contest.objects.filter(key=contest_key).exists():
+        return HttpResponseBadRequest('contest không tồn tại')
+
+    sty_name = request.POST.get('sty') or statement_pdf.DEFAULT_STY
+    sty_path = None
+
+    upload = request.FILES.get('sty_file')
+    if upload:
+        content = upload.read()
+        try:
+            statement_pdf.validate_sty(upload.name, content)
+        except statement_pdf.StatementError as e:
+            return HttpResponseBadRequest(str(e))
+        # Ghi ra đĩa vì celery worker là tiến trình khác, không thấy file tạm của request.
+        # basename() chặn ../ trong tên file do client đặt.
+        updir = os.path.join(_pdf_cache(), 'sty')
+        os.makedirs(updir, exist_ok=True)
+        sty_path = os.path.join(updir, os.path.basename(upload.name))
+        with open(sty_path, 'wb') as f:
+            f.write(content)
+        sty_name = os.path.basename(upload.name)
+
+    result = build_contest_statement.delay(contest_key, sty_name, sty_path)
+    return redirect_to_task_status(
+        result,
+        message=f'Đang biên dịch đề bài "{contest_key}"...',
+        redirect=reverse('hcmus_statement_download', args=[contest_key]))
+
+
+@staff_only
+def statement_download(request, contest_key):
+    if not Contest.objects.filter(key=contest_key).exists():
+        raise Http404()
+    # basename() để key kỳ quái không leo ra khỏi thư mục cache
+    path = os.path.join(_pdf_cache(), os.path.basename(f'{contest_key}.pdf'))
+    if not os.path.exists(path):
+        raise Http404('chưa có PDF cho contest này, hãy bấm tạo lại')
+    resp = FileResponse(open(path, 'rb'), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="{contest_key}.pdf"'
+    return resp
+
+
+# ==========================================================================
+# Bảng xếp hạng team tổng hợp nhiều contest
+# ==========================================================================
+
+def ranking_list(request):
+    rankings = (Ranking.visible_to(request.user)
+                .select_related('creator__user')
+                .prefetch_related('contests__contest'))
+    return render(request, 'hcmus/ranking-list.html', {
+        'title': _('Team rankings'),
+        'rankings': rankings,
+        'can_create': request.user.is_authenticated and request.user.is_staff,
+    })
+
+
+def ranking_detail(request, slug):
+    obj = get_object_or_404(Ranking, slug=slug)
+    if not obj.is_accessible_by(request.user):
+        # 404 chứ không 403: bảng riêng tư thì sự TỒN TẠI của nó cũng không nên lộ
+        raise Http404()
+    rows, rcs = compute_ranking(obj)
+    return render(request, 'hcmus/ranking-detail.html', {
+        'title': obj.name,
+        'ranking': obj,
+        'rows': rows,
+        'ranking_contests': rcs,
+        'can_edit': obj.is_editable_by(request.user),
+        'mixed_units': obj.mixed_penalty_units,
+    })
