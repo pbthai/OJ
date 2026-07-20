@@ -239,8 +239,11 @@
                 <li class="home-nav-element"><span class="nav-divider"></span></li>
                 <li class="home-menu-item"><a href="{{ url('home') }}" class="nav-home">{{ _('Home') }}</a></li>
                 {% for node in mptt_tree(nav_bar) recursive %}
-                    {# FIT-HCMUS: mục có key bắt đầu bằng "adm" chỉ hiện với staff #}
+                    {# FIT-HCMUS: key bắt đầu bằng "adm" chỉ hiện với staff,
+                       "root" chỉ hiện với superuser (mục quản trị toàn site — cho
+                       staff thấy rồi bấm vào ăn 403 thì tệ hơn là không thấy) #}
                     {% if node.key.startswith('adm') and not (request.user.is_authenticated and request.user.is_staff) %}
+                    {% elif node.key.startswith('root') and not (request.user.is_authenticated and request.user.is_superuser) %}
                     {% else %}
                     <li>
                         <a href="{{ node.path }}" class="nav-{{ node.key }}{% if node.key in nav_tab %} active{% endif %}">

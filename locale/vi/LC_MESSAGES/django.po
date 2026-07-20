@@ -9263,3 +9263,132 @@ msgstr "URL rút gọn này không hoạt động."
 
 #~ msgid "Maximum single-case runtime:"
 #~ msgstr "Thời gian chạy test lâu nhất:"
+
+#: judge/models/contest.py judge/utils/statement.py
+msgid "hide problem statements"
+msgstr "ẩn đề bài"
+
+#: judge/models/contest.py judge/utils/statement.py
+msgid "For paper-based exams. Contest editors still see the statement, and nothing is deleted. Stays on until you untick it."
+msgstr "Dùng khi thi đề giấy. Người quản lý kỳ thi vẫn xem được đề, và không có gì bị xoá. Cờ giữ nguyên cho tới khi bỏ tick."
+
+#: judge/models/contest.py judge/utils/statement.py
+msgid "The statement is handed out on paper"
+msgstr "Đề bài được phát trên giấy"
+
+#: judge/models/contest.py judge/utils/statement.py
+msgid "This page is only for submitting code. Submit under the problem letter (A, B, C, ...) shown on the printed statement."
+msgstr "Trang này chỉ dùng để nộp bài. Hãy nộp đúng theo ký hiệu bài (A, B, C, ...) ghi trên đề giấy."
+
+#: hcmus/models.py hcmus/admin.py
+msgid "home page section"
+msgstr "mục trang chủ"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "home page sections"
+msgstr "Quản lý trang chủ"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "team ranking"
+msgstr "bảng xếp hạng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "team rankings"
+msgstr "Bảng xếp hạng team"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "ranking contest"
+msgstr "kỳ thi trong bảng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "ranking contests"
+msgstr "kỳ thi trong bảng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Blog post"
+msgstr "Bài blog"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Team ranking"
+msgstr "Bảng xếp hạng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Custom content"
+msgstr "Nội dung tự soạn"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "kind"
+msgstr "loại"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "rows shown"
+msgstr "số hàng hiện"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "hall of fame size"
+msgstr "số suất bảng vàng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "score when absent"
+msgstr "điểm khi vắng mặt"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "problem setters"
+msgstr "team ra đề"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Add teams in bulk"
+msgstr "Thêm nhiều team cùng lúc"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "…or upload a text file"
+msgstr "…hoặc tải lên file văn bản"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Full ranking"
+msgstr "Xem bảng đầy đủ"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Team rankings"
+msgstr "Bảng xếp hạng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "setter"
+msgstr "ra đề"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "absent"
+msgstr "vắng"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Blog feed (the usual list of posts)"
+msgstr "Dòng bài blog (danh sách bài như thường lệ)"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Blog feed"
+msgstr "Dòng bài blog"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "Add the blog posts currently on the home page"
+msgstr "Nạp các bài blog đang hiện trên trang chủ"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "visible"
+msgstr "đang hiện"
+
+#: hcmus/models.py hcmus/admin.py
+msgid "content"
+msgstr "nội dung"
+
+#: hcmus/admin.py
+msgid "%d blog post is showing on the home page but is not managed here."
+msgid_plural "%d blog posts are showing on the home page but are not managed here."
+msgstr[0] "Có %d bài blog đang hiện trên trang chủ nhưng chưa được quản lý ở đây."
+
+#: hcmus/admin.py
+msgid "Add them to this list"
+msgstr "Nạp vào danh sách"
+
+#: hcmus/admin.py
+msgid "Added %(n)d post(s). Untick \"visible\" on a section to hide it from the home page."
+msgstr "Đã nạp %(n)d bài. Bỏ tick \"đang hiện\" ở một khối để ẩn khối đó khỏi trang chủ."

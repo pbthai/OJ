@@ -1,6 +1,6 @@
 [flake8]
 max-line-length = 120
-application-import-names = dmoj,judge,urlshortener,django_ace,martor
+application-import-names = dmoj,judge,urlshortener,django_ace,martor,hcmus
 import-order-style = pycharm
 enable-extensions = G
 ignore =
@@ -18,6 +18,8 @@ per-file-ignores =
     ./judge/management/commands/runmoss.py:F403,F405
     # E501: line too long, ignore in migrations
     ./judge/migrations/*.py:E501
+    # migration do makemigrations sinh, không sửa tay
+    ./hcmus/migrations/*.py:E501,I100
 exclude =
     # belongs to the user
     ./dmoj/local_settings.py,
