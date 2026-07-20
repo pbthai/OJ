@@ -31,6 +31,7 @@ context) rồi để app mới lấp vào.
 | Phân quyền theo tập hợp lồng nhau | `/admin/hcmus/permset/` | superuser |
 | Ẩn đề bài khi thi trên giấy | ô tick trên form sửa kỳ thi | người quản lý kỳ thi |
 | Nhập bài Polygon chấm theo chữ ký hàm, và bài `run-count=N` | trang import có sẵn của vnoj | staff |
+| Sức khoẻ hệ thống, kèm công tắc bật/tắt máy chấm | `/suc-khoe/` | staff; công tắc cần quyền riêng |
 
 ### Sinh PDF đề bài
 
@@ -89,6 +90,24 @@ Nhánh che phải nằm **ngoài** khối `{% cache %}` của `problem-detail.ht
 `problem_html` chỉ gồm `(problem.id, MATH_ENGINE, LANGUAGE_CODE)`, không có user, nên cache cả nhánh
 che sẽ đầu độc theo hai chiều — thí sinh đọc trúng đề thật, hoặc giảng viên nhìn thấy nội dung thay
 thế suốt 24 giờ.
+
+### Sức khoẻ hệ thống
+
+Hàng đợi chấm, máy chấm, CPU, RAM, đĩa, dịch vụ, sao lưu; tự làm mới mỗi 3 giây.
+
+Số liệu chia theo **độ trễ** chứ không theo nguồn. Hàng đợi, máy chấm, RAM, đĩa và load
+đọc thẳng mỗi lần làm mới nên độ trễ bằng 0. Chỉ những thứ cần quyền root — trạng thái
+dịch vụ, container, thư mục sao lưu — mới đi qua một file JSON do tiến trình chạy dưới
+root ghi mỗi 3 giây.
+
+Kèm công tắc bật/tắt từng máy chấm. Web **không tự chạy docker**: nó ghi ý muốn ra file
+spool, tiến trình root đọc rồi thi hành, và chỉ chấp nhận tên khớp `^judge[0-9]{1,2}$`
+nằm trong danh sách container nó tự liệt kê được. Cho tiến trình web quyền sudo là biến
+một lỗ trong Django thành lỗ root.
+
+Chạy nhiều máy chấm song song trên một máy chủ có làm lệch thời gian không: đo trên 8
+nhân với 6 máy chấm cùng bận, thời gian CPU phình 1% ở trung vị và 4% ở trường hợp xấu
+nhất so với chạy một mình. Xem `docs/10-them-may-cham.md` ở repo công cụ vận hành.
 
 ### Nhập bài Polygon nâng cao
 
