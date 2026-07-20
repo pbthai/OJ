@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block media %}
+<style>
+    .hz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+               gap: 12px; margin-bottom: 18px; }
+    .hz-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; }
+    .hz-card h3 { margin: 0 0 6px; font-size: .85em; text-transform: uppercase;
+                  letter-spacing: .04em; color: #888; font-weight: 600; }
+    .hz-big { font-size: 1.9em; font-weight: 700; line-height: 1.1; }
+    .hz-sub { color: #888; font-size: .88em; margin-top: 3px; }
+    .hz-ok   { border-left: 4px solid #2e9e4f; }
+    .hz-warn { border-left: 4px solid #d79a00; }
+    .hz-bad  { border-left: 4px solid #c0392b; }
+    .hz-unknown { border-left: 4px solid #aaa; }
+    .hz-ok .hz-big   { color: #2e9e4f; }
+    .hz-warn .hz-big { color: #d79a00; }
+    .hz-bad .hz-big  { color: #c0392b; }
+    .hz-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+    .hz-table th, .hz-table td { padding: 5px 8px; border-bottom: 1px solid #ddd;
+                                 text-align: left; }
+    .hz-table th { font-size: .85em; color: #888; font-weight: 600; }
+    .hz-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+              margin-right: 6px; vertical-align: middle; }
+    .hz-run { background: #2e9e4f; } .hz-stop { background: #c0392b; }
+    .hz-bar { height: 5px; border-radius: 3px; background: rgba(127,127,127,.22);
+              margin-top: 7px; overflow: hidden; }
+    .hz-bar > i { display: block; height: 100%; background: currentColor; }
+    .hz-foot { color: #888; font-size: .85em; }
+    .hz-sw { border: 1px solid #bbb; background: transparent; border-radius: 999px;
+             padding: 2px 12px; font: inherit; font-size: .85em; cursor: pointer; color: inherit; }
+    .hz-sw[data-on="1"] { border-color: #2e9e4f; color: #2e9e4f; }
+    .hz-sw[data-on="0"] { border-color: #c0392b; color: #c0392b; }
+    .hz-sw:disabled { opacity: .45; cursor: not-allowed; }
+    .hz-foot b { color: inherit; }
+    @media (prefers-color-scheme: dark) {
+        .hz-card, .hz-table th, .hz-table td { border-color: #333; }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<p class="hz-foot">
+    {% trans %}Queue, judges, memory, disk and load are read live on every refresh.
+    Service and backup status come from a collector running as root, refreshed every
+    few seconds — the web process has no privileges of its own.{% endtrans %}
+</p>
+
+<div id="hz-root"></div>
+
+<p class="hz-foot" id="hz-foot"></p>
+
+<script>
+const REFRESH_MS = 3000;
+const CAN_TOGGLE = {{ 'true' if can_toggle else 'false' }};
+const CSRF = '{{ csrf_token }}';
+let DATA = {{ data|tojson }};
+let BUSY = null;   // tên máy đang đợi phản hồi, để không bấm chồng
+
+function human(n) {
+    if (n === null || n === undefined) return '—';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i ? n.toFixed(1) : n) + ' ' + u[i];
+}
+function dur(s) {
+    if (s === null || s === undefined) return '—';
+    if (s < 60) return s + ' giây';
+    if (s < 3600) return Math.floor(s / 60) + ' phút';
+    if (s < 86400) return Math.floor(s / 3600) + ' giờ';
+    return Math.floor(s / 86400) + ' ngày';
+}
+function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+function card(title, big, sub, level, pct) {
+    const bar = (pct === null || pct === undefined) ? '' :
+        '<div class="hz-bar"><i style="width:' + Math.min(100, pct) + '%"></i></div>';
+    return '<div class="hz-card hz-' + (level || 'unknown') + '">' +
+        '<h3>' + esc(title) + '</h3>' +
+        '<div class="hz-big">' + big + '</div>' +
+        '<div class="hz-sub">' + sub + '</div>' + bar + '</div>';
+}
+
+function render(d) {
+    const L = d.live, P = d.privileged;
+    let h = '<div class="hz-grid">';
+
+    h += card('Hàng đợi chấm', L.queue.count,
+              L.queue.count ? 'chờ lâu nhất ' + dur(L.queue.oldest_age_sec) : 'không có bài chờ',
+              L.queue.level);
+
+    h += card('Máy chấm', L.judges_online + '/' + L.judges_total,
+              L.judges_online ? 'đang hoạt động' : 'KHÔNG có máy chấm nào online',
+              L.judges_online ? 'ok' : 'bad');
+
+    const cpu = (P && P.cpu_percent !== null && P.cpu_percent !== undefined) ? P.cpu_percent : null;
+    h += card('CPU', cpu === null ? '—' : cpu + '%',
+              L.load ? 'load ' + L.load.join(' / ') + ' trên ' + L.ncpu + ' nhân' : '—',
+              L.load_level, cpu);
+
+    h += card('RAM', L.mem ? L.mem.percent + '%' : '—',
+              L.mem ? human(L.mem.used) + ' / ' + human(L.mem.total) : '—',
+              L.mem_level, L.mem ? L.mem.percent : null);
+
+    h += card('Đĩa', L.disk ? L.disk.percent + '%' : '—',
+              L.disk ? 'còn trống ' + human(L.disk.free) : '—',
+              L.disk_level, L.disk ? L.disk.percent : null);
+
+    h += card('Bài nộp 24 giờ', L.submissions_24h,
+              L.problems_size ? 'dữ liệu bài ' + human(L.problems_size) : '', 'ok');
+    h += '</div>';
+
+    if (L.judges.length) {
+        h += '<table class="hz-table"><thead><tr><th>Máy chấm</th><th>Trạng thái</th>' +
+             '<th>Ping</th><th>Tải</th><th>Công tắc</th></tr></thead><tbody>';
+        for (const j of L.judges) {
+            let sw = '<span class="hz-foot">—</span>';
+            if (j.switch !== null && j.switch !== undefined) {
+                sw = CAN_TOGGLE
+                    ? '<button class="hz-sw" data-judge="' + esc(j.name) + '" data-on="' +
+                      (j.switch ? '1' : '0') + '">' + (j.switch ? 'đang bật' : 'đang tắt') + '</button>'
+                    : '<span class="hz-foot">' + (j.switch ? 'bật' : 'tắt') + '</span>';
+            }
+            h += '<tr><td>' + esc(j.name) + '</td>' +
+                 '<td><span class="hz-dot ' + (j.online ? 'hz-run' : 'hz-stop') + '"></span>' +
+                 (j.online ? 'trực tuyến' : (j.running ? 'đang khởi động' : 'đã dừng')) + '</td>' +
+                 '<td>' + (j.ping_ms === null ? '—' : j.ping_ms + ' ms') + '</td>' +
+                 '<td>' + (j.load === null ? '—' : j.load) + '</td>' +
+                 '<td>' + sw + '</td></tr>';
+        }
+        h += '</tbody></table>';
+    }
+
+    if (!P) {
+        h += '<p class="hz-foot">Chưa đọc được ' + esc(d.health_file) +
+             '. Tiến trình thu thập (supervisor: ojhealth) có thể chưa chạy.</p>';
+    } else {
+        const svc = P.services || {};
+        const names = Object.keys(svc);
+        if (names.length) {
+            h += '<table class="hz-table"><thead><tr><th>Dịch vụ</th><th>Trạng thái</th>' +
+                 '<th>Chi tiết</th></tr></thead><tbody>';
+            for (const n of names.sort()) {
+                const run = svc[n].state === 'RUNNING';
+                h += '<tr><td>' + esc(n) + '</td>' +
+                     '<td><span class="hz-dot ' + (run ? 'hz-run' : 'hz-stop') + '"></span>' +
+                     esc(svc[n].state) + '</td><td>' + esc(svc[n].detail) + '</td></tr>';
+            }
+            h += '</tbody></table>';
+        }
+        if ((P.containers || []).length) {
+            h += '<table class="hz-table"><thead><tr><th>Container</th><th>Trạng thái</th>' +
+                 '</tr></thead><tbody>';
+            for (const c of P.containers) {
+                h += '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.status) + '</td></tr>';
+            }
+            h += '</tbody></table>';
+        }
+        h += '<table class="hz-table"><thead><tr><th>Sao lưu</th><th>Bản gần nhất</th>' +
+             '<th>Cách đây</th><th>Cỡ</th><th>Số bản</th></tr></thead><tbody>';
+        for (const b of (P.backups || [])) {
+            h += '<tr><td>' + esc(b.dir) + '</td>' +
+                 (b.empty ? '<td colspan="4">trống</td>'
+                          : '<td>' + esc(b.newest) + '</td><td>' + dur(b.age_sec) + '</td>' +
+                            '<td>' + human(b.size) + '</td><td>' + b.count + '</td>') + '</tr>';
+        }
+        if (!(P.backups || []).length) h += '<tr><td colspan="5">không thấy thư mục sao lưu nào</td></tr>';
+        h += '</tbody></table>';
+    }
+
+    document.getElementById('hz-root').innerHTML = h;
+
+    let foot = 'Tự làm mới mỗi ' + (REFRESH_MS / 1000) + ' giây. ';
+    if (d.stale_sec === null || d.stale_sec === undefined) {
+        foot += 'Chưa có dữ liệu từ tiến trình thu thập.';
+    } else {
+        foot += 'Số liệu cần quyền root cũ <b>' + d.stale_sec + ' giây</b>' +
+                (P && P.interval ? ' (chu kỳ thu thập ' + P.interval + ' giây)' : '') + '.';
+    }
+    document.getElementById('hz-foot').innerHTML = foot;
+}
+
+// Bấm công tắc: gửi ý muốn lên server, tiến trình root thi hành trong vài giây.
+document.addEventListener('click', function (e) {
+    const b = e.target.closest('.hz-sw');
+    if (!b || BUSY) return;
+    const name = b.dataset.judge, want = b.dataset.on === '1' ? '0' : '1';
+    BUSY = name;
+    b.disabled = true;
+    b.textContent = 'đang đổi...';
+    const body = new URLSearchParams({on: want});
+    fetch('/suc-khoe/may-cham/' + encodeURIComponent(name) + '/', {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded'},
+        body: body,
+    }).then(r => r.json()).then(() => {
+        // Container mất vài giây mới lên/xuống; nhịp làm mới kế tiếp sẽ hiện đúng.
+        setTimeout(function () { BUSY = null; }, 1500);
+    }).catch(function () { BUSY = null; });
+});
+
+render(DATA);
+setInterval(function () {
+    if (BUSY) return;   // đang đổi thì đừng vẽ đè lên
+    fetch('{{ url("hcmus_health_data") }}', {credentials: 'same-origin'})
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && !BUSY) { DATA = d; render(d); } })
+        .catch(() => {});   // mất mạng chốc lát thì giữ nguyên số cũ, không xoá trắng
+}, REFRESH_MS);
+</script>
+{% endblock %}
