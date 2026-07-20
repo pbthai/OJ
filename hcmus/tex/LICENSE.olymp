@@ -1,0 +1,41 @@
+Ba file icpc.sty, icpcHCMUS.sty và olpHCMUS.sty trong thư mục này là bản CHỈNH SỬA
+từ olymp.sty (https://github.com/GassaFM/olymp.sty), phát hành theo giấy phép MIT
+dưới đây. Giấy phép MIT buộc bản phân phối lại phải kèm nguyên văn thông báo bản
+quyền và giấy phép, nên chép đầy đủ vào đây thay vì chỉ dẫn liên kết.
+
+Các chỗ đã sửa so với bản gốc:
+  - đổi \ProvidesPackage sang tên tương ứng của từng file
+  - icpcHCMUS.sty: bật lại khối hiển thị Memory limit (bản gốc để comment), và
+    đổi logo góc trái ở header trang sang logo trường
+  - olpHCMUS.sty: từ khoá tiếng Việt, có thêm mục Hướng dẫn giải
+
+Lưu ý cho ai dùng lại: cả ba file dùng thủ thuật \ifx&#2& (lấy ký tự & làm mốc so
+sánh chuỗi rỗng). Macro chứa nó được bung bên trong ô của tabular, nên khi gói
+`array` được nạp thì các ký tự & đó bị quét thành dấu ngăn cột và biên dịch chết
+với "Misplaced alignment tab character &". Bộ sinh PDF trong app này tự đổi mốc
+sang \relax lúc build (phép đổi bảo toàn ngữ nghĩa) nên các file ở đây giữ nguyên
+xi bản gốc, không vá sẵn.
+
+--------------------------------------------------------------------------------
+
+Copyright (c) 2005-2013 Olymp.sty Developers Group.
+See https://github.com/GassaFM/olymp.sty/blob/master/AUTHORS
+for the complete list of authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

@@ -1,0 +1,147 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tải đề bài PDF</title>
+<style>
+  :root { --line:#e2e5e9; --muted:#6b7280; --accent:#0b6cb5; --bg:#fff; --fg:#1b1f23; }
+  @media (prefers-color-scheme: dark) {
+    :root { --line:#2b3138; --muted:#9aa4b2; --accent:#4da3e0; --bg:#14171a; --fg:#e6e8ea; }
+  }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+         max-width: 900px; margin: 0 auto; padding: 28px 20px 60px;
+         background: var(--bg); color: var(--fg); }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px;
+             margin: 0 0 18px; }
+  legend { font-weight: 600; padding: 0 6px; font-size: 14px; }
+  #search { width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+            border-radius: 6px; background: transparent; color: inherit; margin-bottom: 10px; }
+  #list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+  label.row { display: flex; gap: 10px; align-items: baseline; padding: 9px 12px;
+              border-bottom: 1px solid var(--line); cursor: pointer; }
+  label.row:last-child { border-bottom: 0; }
+  label.row:hover { background: rgba(127,127,127,.08); }
+  .name { flex: 1; }
+  .meta { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .tag { font-size: 11px; border: 1px solid var(--accent); color: var(--accent);
+         border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+  label.sty { display: block; padding: 7px 0; }
+  label.sty .d { color: var(--muted); font-size: 13px; margin-left: 24px; display: block; }
+  input[type=file] { margin-top: 6px; }
+  button { font: inherit; font-weight: 600; padding: 10px 22px; border: 0; border-radius: 6px;
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .note { color: var(--muted); font-size: 13.5px; margin-top: 14px; }
+  .note code { background: rgba(127,127,127,.14); padding: 1px 5px; border-radius: 3px; }
+  a { color: var(--accent); }
+</style>
+
+<h1>Tải đề bài PDF</h1>
+<p class="sub">Sinh trọn bộ đề của một kỳ thi thành một file PDF, dùng khuôn LaTeX của trường.</p>
+
+<form method="post" enctype="multipart/form-data" id="form">
+  <input type="hidden" name="csrfmiddlewaretoken" value="__CSRF_TOKEN__">
+
+  <fieldset>
+    <legend>Kỳ thi</legend>
+    <input id="search" placeholder="Lọc theo tên hoặc key..." autocomplete="off">
+    <div id="list"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Kiểu trình bày</legend>
+    <div id="styles"></div>
+    <label class="sty">
+      <input type="radio" name="sty_mode" value="upload"> Tải lên file .sty riêng
+      <span class="d">Dùng khuôn của bạn. Giới hạn 512KB.</span>
+    </label>
+    <input type="file" name="sty_file" id="sty_file" accept=".sty" disabled>
+  </fieldset>
+
+  <button type="submit" id="go" disabled>Tạo PDF</button>
+  <p class="note">
+    Biên dịch chạy nền, mất khoảng 10&ndash;40 giây tuỳ số bài. Trang tiến độ sẽ tự
+    chuyển sang link tải khi xong. Đề lấy từ nội dung bài trên hệ thống; kỳ thi đang
+    <em>ẩn đề để thi giấy</em> vẫn ra đề thật, vì việc ẩn chỉ tác động tầng hiển thị.
+  </p>
+</form>
+
+<script>
+const DATA = __STATEMENT_DATA__;
+const list = document.getElementById('list');
+const search = document.getElementById('search');
+const go = document.getElementById('go');
+const fileInput = document.getElementById('sty_file');
+
+function render(filter) {
+  const q = (filter || '').toLowerCase();
+  list.innerHTML = '';
+  const hits = DATA.contests.filter(c =>
+    !q || c.name.toLowerCase().includes(q) || c.key.toLowerCase().includes(q));
+  if (!hits.length) {
+    list.innerHTML = '<div style="padding:14px;color:var(--muted)">Không có kỳ thi nào khớp.</div>';
+    return;
+  }
+  for (const c of hits) {
+    const label = document.createElement('label');
+    label.className = 'row';
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'contest'; radio.value = c.key;
+    radio.addEventListener('change', () => { go.disabled = false; });
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = c.name;
+    if (c.cached) {
+      const t = document.createElement('span');
+      t.className = 'tag'; t.textContent = 'đã có PDF';
+      name.appendChild(t);
+    }
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = c.date + ' · ' + c.count + ' bài';
+    label.append(radio, name, meta);
+    list.appendChild(label);
+  }
+}
+
+const styles = document.getElementById('styles');
+for (const s of DATA.styles) {
+  const label = document.createElement('label');
+  label.className = 'sty';
+  const radio = document.createElement('input');
+  radio.type = 'radio'; radio.name = 'sty_mode'; radio.value = s.name;
+  if (s.name === DATA.default_sty) radio.checked = true;
+  const d = document.createElement('span');
+  d.className = 'd'; d.textContent = s.desc;
+  label.append(radio, document.createTextNode(' ' + s.name), d);
+  styles.appendChild(label);
+}
+
+document.addEventListener('change', e => {
+  if (e.target.name === 'sty_mode') {
+    fileInput.disabled = e.target.value !== 'upload';
+    if (fileInput.disabled) fileInput.value = '';
+  }
+});
+
+// Form gửi lên field tên 'sty'; radio dùng tên khác để phân biệt chế độ upload.
+document.getElementById('form').addEventListener('submit', e => {
+  const mode = document.querySelector('input[name=sty_mode]:checked');
+  if (mode && mode.value !== 'upload') {
+    const h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'sty'; h.value = mode.value;
+    e.target.appendChild(h);
+  } else if (mode && !fileInput.files.length) {
+    e.preventDefault();
+    alert('Bạn chọn tải lên .sty nhưng chưa chọn file.');
+    return;
+  }
+  go.disabled = true;
+  go.textContent = 'Đang gửi...';
+});
+
+search.addEventListener('input', () => render(search.value));
+render('');
+</script>
