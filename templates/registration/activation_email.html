@@ -7,13 +7,13 @@
       <a href="http://{{ site.domain }}/accounts/activate/{{ activation_key }}/">http://{{ site.domain }}/accounts/activate/{{ activation_key }}</a>
 </p>
 
-{{ _('Alternatively, you can reply to this message to activate your account.') }}
-{{ _('Your reply must keep the following text intact for this to work:') }}
-
-<pre style="margin-left:1em">
-{{ activation_key }}
-</pre>
-
+{# Bản gốc còn mời "reply lại email này để kích hoạt" kèm nguyên activation key.
+   Đã bỏ: không có tiến trình nào đọc thư đến, MX của miền trỏ thẳng vào Google
+   nên thư trả lời chỉ nằm im trong hộp noreply không ai đọc. Người dùng làm theo
+   sẽ chờ vô ích. Chỉ còn đúng một cách kích hoạt, và cách đó chạy được. #}
 {{ _('See you soon!') }}
-<br>
-{{ _('If you have problems activating your account, feel free to shoot us a message at: ') }}{% if misc_config.discord_invite_link and misc_config.discord_invite_shieldio %}<a href="{{ misc_config.discord_invite_link }}"><img src="{{ misc_config.discord_invite_shieldio }}"></a>{% endif %}
+{# Câu mời liên hệ chỉ hiện khi có link thật. Bản gốc để câu này ngoài {% if %},
+   nên khi chưa cấu hình Discord thì thư kết thúc bằng một câu cụt "...liên hệ với
+   chúng mình qua:" rồi bỏ lửng. #}
+{% if misc_config.discord_invite_link and misc_config.discord_invite_shieldio %}<br>
+{{ _('If you have problems activating your account, feel free to shoot us a message at: ') }}<a href="{{ misc_config.discord_invite_link }}"><img src="{{ misc_config.discord_invite_shieldio }}"></a>{% endif %}

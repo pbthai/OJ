@@ -7761,7 +7761,7 @@ msgid ""
 "days."
 msgstr ""
 "Hãy kích hoạt tài khoản %(site_name)s của bạn trong vòng %(expiration_days)d "
-"tới"
+"ngày tới."
 
 #: templates/registration/activation_email.html:5
 #: templates/registration/activation_email.txt:3
