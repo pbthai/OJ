@@ -1,4 +1,6 @@
 {% extends "blog/list.html" %}
+{% block sidebar_extra %}{% include "hcmus/featured-rankings.html" %}{% endblock %}
+{% block main_column_top %}{% include "hcmus/home-sections.html" %}{% endblock %}
 {% block before_posts %}
     {% if misc_config.home_page_top %}
         {{ render_django(misc_config.home_page_top, request=request, user_count=user_count, problem_count=problem_count, submission_count=submission_count, language_count=language_count, perms=perms) }}

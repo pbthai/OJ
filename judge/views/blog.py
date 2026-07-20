@@ -271,6 +271,51 @@ class PostList(PostListBase):
         context['tab'] = self.tab
         context['left_align_tabs'] = True
 
+        # FIT-HCMUS: nội dung tuỳ biến trên trang chủ. Bọc try/except vì app hcmus
+        # được bật qua local_settings.py — deploy nào không có nó thì trang chủ vẫn
+        # phải chạy bình thường thay vì đổ 500.
+        context['featured_rankings'] = []
+        context['home_sections'] = []
+        context['pinned_post_ids'] = []
+        context['hide_blog_feed'] = False
+        try:
+            from hcmus.models import HomeSection, Ranking
+            from hcmus.ranking import compute_cached
+
+            context['featured_rankings'] = list(
+                Ranking.objects.filter(visibility=Ranking.FEATURED).order_by('-modified')[:5])
+
+            sections = HomeSection.for_user(self.request.user)
+            for s in sections:
+                if s.kind == HomeSection.RANKING:
+                    s.rows = compute_cached(s.ranking)
+            context['home_sections'] = sections
+
+            # Lấy CẢ khối đang tắt: tắt khối = ẩn bài khỏi trang chủ, chứ không
+            # phải trả bài về luồng blog bên dưới.
+            pinned = HomeSection.managed_post_ids()
+            context['pinned_post_ids'] = pinned
+            # Có khối 'dòng bài blog' thì template hcmus render luồng bài (đúng vị
+            # trí đã sắp), lõi phải nhường chỗ.
+            context['hide_blog_feed'] = HomeSection.feed_is_managed()
+            # blog-post.html đọc post_comment_counts[post.id]; bài ghim có thể nằm
+            # ngoài trang hiện tại nên chưa có trong dict -> bổ sung, nếu không ô
+            # đếm bình luận của khối ghim luôn hiện 0.
+            if pinned:
+                counts = context.get('post_comment_counts') or {}
+                missing = [pid for pid in pinned if pid not in counts]
+                if missing:
+                    # cùng khuôn với chỗ dựng post_comment_counts ở trên
+                    counts.update({
+                        int(page[2:]): count for page, count in
+                        Comment.objects
+                               .filter(page__in=['b:%d' % pid for pid in missing], hidden=False)
+                               .values_list('page').annotate(count=Count('page')).order_by()
+                    })
+                    context['post_comment_counts'] = counts
+        except Exception:
+            pass
+
         return context
 
     def get_top_rated_users(self):

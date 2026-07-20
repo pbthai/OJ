@@ -1,0 +1,9 @@
+{# Luồng bài blog. Tách ra partial để khối "dòng bài blog" của FIT-HCMUS render
+   được ở đúng vị trí người quản trị đã sắp, thay vì cố định một chỗ. #}
+{% for post in posts %}
+    {# bài đã có khối quản lý riêng thì bỏ qua: hoặc nó đang hiện ở trên, hoặc
+       khối của nó bị tắt và người quản trị muốn nó biến mất hẳn #}
+    {% if post.id not in (pinned_post_ids or []) %}
+        {% include "blog/blog-post.html" %}
+    {% endif %}
+{% endfor %}

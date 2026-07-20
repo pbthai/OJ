@@ -1,0 +1,71 @@
+{# Các khối nội dung do root admin ghim lên cột chính trang chủ (hcmus.HomeSection).
+   Nằm trong cùng div.sidebox-content với các <section class="post">, nên dùng lại
+   đúng class .post/.title/.blog-body để trông đồng bộ với bài blog.
+   Chỉ hiện ở TRANG 1: sang trang 2, 3 mà vẫn hiện thì thành lặp lại vô nghĩa. #}
+{% if home_sections and page_obj.number == 1 %}
+    {% include "hcmus/ranking-styles.html" %}
+    <style>
+        .hs-block { margin: 0 0.5em 1.4em; }
+        .hs-block:first-child { margin-top: 1.1em; }
+        .hs-title { font-weight: 600; font-size: 1.7em; margin: 0 0 .2em; }
+        .hs-body { border-left: 4px solid #ccc; padding-left: 1em; }
+        .hs-meta { color: #888; font-size: .9em; }
+        .hs-more { font-size: .9em; }
+        @media (prefers-color-scheme: dark) { .hs-body { border-left-color: #444; } }
+    </style>
+
+    {% for s in home_sections %}
+        {% if s.kind == 'post' %}
+            {# Dùng thẳng template bài blog của hệ thống: có sẵn vote, bình luận,
+               và chung khoá cache 'post_summary' nên không tốn thêm lần render. #}
+            {% with post = s.post %}
+                {% include "blog/blog-post.html" %}
+            {% endwith %}
+
+        {% elif s.kind == 'ranking' %}
+            <div class="hs-block">
+                <h2 class="hs-title">
+                    <a href="{{ url('hcmus_ranking_detail', s.ranking.slug) }}">{{ s.display_title }}</a>
+                </h2>
+                {# rows do view tính sẵn (có cache) và gắn vào s.rows; compact=true
+                   để bỏ các cột contest cho vừa bề ngang cột chính #}
+                {% with rows = s.rows, ranking = s.ranking, ranking_contests = [],
+                        limit = s.limit, compact = true %}
+                    {% include "hcmus/ranking-table.html" %}
+                {% endwith %}
+                <p class="hs-more">
+                    <a href="{{ url('hcmus_ranking_detail', s.ranking.slug) }}">{{ _('Full ranking') }} →</a>
+                </p>
+            </div>
+
+        {% elif s.kind == 'feed' %}
+            {# Luồng bài blog thường, render ở đúng vị trí đã sắp #}
+            {% include "blog/post-loop.html" %}
+
+        {% elif s.kind == 'contest' %}
+            <div class="hs-block">
+                <h2 class="hs-title">
+                    <a href="{{ url('contest_view', s.contest.key) }}">{{ s.display_title }}</a>
+                </h2>
+                <div class="hs-body">
+                    <p class="hs-meta">
+                        {{ s.contest.start_time|date(_("M j, Y, G:i")) }}
+                        &ndash; {{ s.contest.end_time|date(_("M j, Y, G:i")) }}
+                        &middot; {{ s.contest.contest_problems.count() }} {{ _('problems') }}
+                    </p>
+                    {% if s.contest.summary %}<p>{{ s.contest.summary }}</p>{% endif %}
+                </div>
+            </div>
+
+        {% else %}
+            <div class="hs-block">
+                {% if s.title %}<h2 class="hs-title">{{ s.title }}</h2>{% endif %}
+                {# style 'flatpage' = không lọc bleach, HTML thô đi thẳng. Chấp nhận
+                   được vì chỉ superuser soạn được khối này. #}
+                <div class="hs-body content-description">
+                    {{ s.content|markdown('flatpage')|reference|str|safe }}
+                </div>
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endif %}

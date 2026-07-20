@@ -68,9 +68,16 @@
                     <div class="gcse-searchresults-only"></div>
                 </div>
                 {% endif %}
-                {% for post in posts %}
-                    {% include "blog/blog-post.html" %}
-                {% endfor %}
+                {# FIT-HCMUS: chỗ móc cho các khối ghim ở đầu cột chính (trang chủ).
+                   Đặt ở đây, bên trong .sidebox-content, để khối ghim NGANG HÀNG với
+                   bài blog. Block before_posts của vnoj không dùng được: nó nằm trên
+                   cả hai cột, thành dải full-width chứ không nằm trong luồng nội dung. #}
+                {% block main_column_top %}{% endblock %}
+                {# hide_blog_feed: trang chủ có khối "dòng bài blog" thì khối đó tự
+                   render luồng bài ở đúng vị trí đã sắp, chỗ này nhường. #}
+                {% if not hide_blog_feed %}
+                    {% include "blog/post-loop.html" %}
+                {% endif %}
             </div>
             {% if page_obj.has_other_pages() %}
                 <div class="bottom-pagination-bar">{% include "list-pages.html" %}</div>
@@ -78,6 +85,8 @@
         </div>
 
         <div class="blog-sidebar">
+            {# FIT-HCMUS: chỗ móc cho khối phụ ở đầu sidebar (trang chủ dùng cho bảng xếp hạng nổi bật) #}
+            {% block sidebar_extra %}{% endblock %}
             {% if own_open_tickets %}
                 <div class="blog-sidebox sidebox">
                     <h3>{{ _('My open tickets') }} <i class="fa fa-question-circle"></i></h3>
