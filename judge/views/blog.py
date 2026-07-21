@@ -285,6 +285,13 @@ class PostList(PostListBase):
             context['featured_rankings'] = list(
                 Ranking.objects.filter(visibility=Ranking.FEATURED).order_by('-modified')[:5])
 
+            # Lịch cột phải (sự kiện sắp tới, lọc theo người xem) và bảng tăng
+            # rating trong tuần. Cùng nằm trong try/except: hcmus bật qua
+            # local_settings nên deploy nào thiếu app vẫn phải chạy.
+            from hcmus import calendar as hcmus_cal
+            context['calendar_upcoming'] = hcmus_cal.upcoming(self.request.user, limit=6)
+            context['weekly_top'] = hcmus_cal.weekly_rating_gain(limit=8)
+
             sections = HomeSection.for_user(self.request.user)
             for s in sections:
                 if s.kind == HomeSection.RANKING:

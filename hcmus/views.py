@@ -303,3 +303,28 @@ def health_judge_toggle(request, name):
     sw.changed_by = request.profile if hasattr(request, 'profile') else None
     sw.save()   # signal tự ghi spool
     return JsonResponse({'name': sw.name, 'enabled': sw.enabled})
+
+
+# ==========================================================================
+# Lịch: trang xem (lọc theo user) + feed .ics công khai
+# ==========================================================================
+
+def calendar_ical(request):
+    """Feed .ics công khai. KHÔNG đăng nhập, chỉ phần công khai: công cụ lịch bên
+    thứ ba fetch feed không mang phiên đăng nhập nên không phân quyền theo người
+    ở tầng này được. Lịch riêng chỉ hiện trên web (calendar_page)."""
+    from hcmus import calendar as cal
+    resp = HttpResponse(cal.public_ical(request), content_type='text/calendar; charset=utf-8')
+    resp['Content-Disposition'] = 'inline; filename="fit-hcmus-oj.ics"'
+    return resp
+
+
+def calendar_page(request):
+    """Lịch đầy đủ, lọc theo đúng người đang xem. Contest tự vào theo quyền của họ,
+    cộng các sự kiện tay họ được xem. Ẩn danh chỉ thấy phần công khai."""
+    from hcmus import calendar as cal
+    return render(request, 'hcmus/calendar.html', {
+        'title': _('Calendar'),
+        'items': cal.agenda(request.user),
+        'ical_url': request.build_absolute_uri(reverse('hcmus_calendar_ical')),
+    })

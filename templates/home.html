@@ -1,5 +1,9 @@
 {% extends "blog/list.html" %}
-{% block sidebar_extra %}{% include "hcmus/featured-rankings.html" %}{% endblock %}
+{% block sidebar_extra %}
+    {% include "hcmus/calendar-sidebox.html" %}
+    {% include "hcmus/featured-rankings.html" %}
+    {% include "hcmus/weekly-top.html" %}
+{% endblock %}
 {% block main_column_top %}{% include "hcmus/home-sections.html" %}{% endblock %}
 {% block before_posts %}
     {% if misc_config.home_page_top %}

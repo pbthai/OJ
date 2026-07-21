@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from judge.models import Contest, Profile
+from judge.models import Contest, Organization, Profile
 
 _local = threading.local()
 
@@ -517,3 +517,112 @@ class JudgeSwitch(models.Model):
 @receiver([post_save, post_delete], sender=JudgeSwitch)
 def _judgeswitch_changed(sender, instance, **kwargs):
     JudgeSwitch.write_spool()
+
+
+class CalendarEvent(models.Model):
+    """Sự kiện nhập tay cho lịch trang chủ: ICPC vùng, site regional, tập huấn,
+    họp ban quản trị...
+
+    Các kỳ thi KHÔNG lưu ở đây. Lịch hợp nhất hai nguồn lúc đọc: Contest lấy qua
+    Contest.get_visible_contests(user) nên tạo contest là nó tự lên lịch, còn
+    model này chỉ giữ những sự kiện không phải contest. Tránh nhân bản để không
+    có chuyện hai bản lệch nhau.
+
+    Ai XEM được quyết định bằng chính membership của online judge, không đẩy lên
+    Google Calendar: Google chia sẻ theo email, không hiểu "thành viên lớp X".
+    """
+    PUBLIC = 'P'
+    ORG = 'O'
+    INTERNAL = 'I'
+    VISIBILITY = (
+        (PUBLIC, _('Public — anyone can see it, including in the subscribe feed')),
+        (ORG, _('Class — only members of the chosen classes')),
+        (INTERNAL, _('Internal — only people with the "view internal calendar" permission')),
+    )
+
+    # Chỉ để phân loại và tô màu, KHÔNG mang ý nghĩa quyền. Quyền nằm ở visibility.
+    ICPC = 'icpc'
+    REGIONAL = 'regional'
+    TRAINING = 'training'
+    MEETING = 'meeting'
+    CONTEST = 'contest'
+    OTHER = 'other'
+    CATEGORIES = (
+        (ICPC, _('ICPC / regional')),
+        (REGIONAL, _('Regional site')),
+        (TRAINING, _('Training session')),
+        (MEETING, _('Meeting')),
+        (CONTEST, _('Contest (non-system)')),
+        (OTHER, _('Other')),
+    )
+
+    title = models.CharField(max_length=150, verbose_name=_('title'))
+    description = models.TextField(blank=True, verbose_name=_('description'))
+    location = models.CharField(max_length=200, blank=True, verbose_name=_('location'),
+                                help_text=_('Room, city, or a URL.'))
+    start_time = models.DateTimeField(db_index=True, verbose_name=_('start time'))
+    end_time = models.DateTimeField(null=True, blank=True, verbose_name=_('end time'),
+                                    help_text=_('Leave empty for a point-in-time or all-day event.'))
+    all_day = models.BooleanField(default=False, verbose_name=_('all day'))
+    visibility = models.CharField(max_length=1, choices=VISIBILITY, default=PUBLIC,
+                                  verbose_name=_('visibility'))
+    # M2M chứ không phải FK số ít như Contest.organization: một buổi tập huấn có
+    # thể cần nhiều lớp cùng thấy.
+    organizations = models.ManyToManyField(
+        Organization, blank=True, related_name='calendar_events', verbose_name=_('classes'),
+        help_text=_('Only used when visibility is "Class". Members of any of these classes see it.'))
+    category = models.CharField(max_length=16, choices=CATEGORIES, default=OTHER,
+                                verbose_name=_('category'))
+    url = models.CharField(max_length=300, blank=True, verbose_name=_('link'),
+                           help_text=_('Optional. Clicking the event opens this.'))
+    created_by = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name=_('created by'))
+    created = models.DateTimeField(auto_now_add=True, verbose_name=_('created'))
+    modified = models.DateTimeField(auto_now=True, verbose_name=_('last modified'))
+
+    class Meta:
+        verbose_name = _('calendar event')
+        verbose_name_plural = _('calendar events')
+        ordering = ['start_time']
+        indexes = [models.Index(fields=['visibility', 'start_time'])]
+        permissions = (('view_internal_calendar', _('View internal calendar events')),)
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def effective_end(self):
+        """Mốc kết thúc để hiển thị/xuất iCal. Trống thì suy ra: all-day dài một
+        ngày, có giờ thì coi như tức thời (end = start)."""
+        if self.end_time:
+            return self.end_time
+        if self.all_day:
+            return self.start_time + timezone.timedelta(days=1)
+        return self.start_time
+
+    def is_visible_to(self, user):
+        if self.visibility == self.PUBLIC:
+            return True
+        if not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        if self.visibility == self.INTERNAL:
+            return user.has_perm('hcmus.view_internal_calendar')
+        # ORG: thành viên của ít nhất một lớp được gán
+        return self.organizations.filter(id__in=user.profile.organizations.all()).exists()
+
+    @classmethod
+    def visible_to(cls, user):
+        """Queryset các sự kiện `user` được xem. Lọc thẳng trong DB bằng Q, cùng
+        khuôn với Ranking.visible_to và Contest.get_visible_contests."""
+        from django.db.models import Q
+        public = Q(visibility=cls.PUBLIC)
+        if not user.is_authenticated:
+            return cls.objects.filter(public)
+        if user.is_superuser:
+            return cls.objects.all()
+        cond = public | Q(visibility=cls.ORG, organizations__in=user.profile.organizations.all())
+        if user.has_perm('hcmus.view_internal_calendar'):
+            cond |= Q(visibility=cls.INTERNAL)
+        return cls.objects.filter(cond).distinct()

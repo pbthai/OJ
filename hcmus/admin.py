@@ -17,7 +17,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from hcmus.models import HomeSection, JudgeSwitch, PermSet, Ranking, RankingContest
+from hcmus.models import CalendarEvent, HomeSection, JudgeSwitch, PermSet, Ranking, RankingContest
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -467,3 +467,32 @@ class JudgeSwitchAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(CalendarEvent)
+class CalendarEventAdmin(admin.ModelAdmin):
+    """Sự kiện lịch nhập tay. Gác bằng chính quyền model mặc định
+    (add/change/delete/view_calendarevent) — chúng gộp thành khối 'sua-lich',
+    con của 'dang-trang-chu' trong cây phân quyền, nên ai được giao quản lý trang
+    chủ thì thêm sự kiện được, không phải cấu hình gì thêm."""
+    list_display = ('title', 'category', 'visibility', 'start_time', 'end_time', 'created_by')
+    list_filter = ('visibility', 'category', 'all_day')
+    search_fields = ('title', 'description', 'location')
+    date_hierarchy = 'start_time'
+    filter_horizontal = ('organizations',)
+    readonly_fields = ('created_by', 'created', 'modified')
+    fieldsets = (
+        (None, {'fields': ('title', 'description', 'location', 'url', 'category')}),
+        (_('Time'), {'fields': ('start_time', 'end_time', 'all_day')}),
+        (_('Who can see it'), {
+            'fields': ('visibility', 'organizations'),
+            'description': _('"Class" shows the event only to members of the chosen classes. '
+                             '"Internal" needs the "view internal calendar" permission.')}),
+        (_('Meta'), {'fields': ('created_by', 'created', 'modified')}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        # Ghi lại người tạo, chỉ đặt một lần. Không để trống rồi phải nhập tay.
+        if not obj.created_by_id and getattr(request, 'profile', None) is not None:
+            obj.created_by = request.profile
+        super().save_model(request, obj, form, change)

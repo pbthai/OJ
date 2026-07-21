@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block media %}
+<style>
+    .cal-sub { border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; }
+    .cal-sub code { word-break: break-all; }
+    .cal-btn { display: inline-block; border: 1px solid #3b5998; color: #3b5998; background: transparent;
+               border-radius: 6px; padding: 3px 12px; font: inherit; font-size: .9em; cursor: pointer;
+               text-decoration: none; margin-right: 6px; }
+    .cal-note { color: #888; font-size: .88em; margin-top: 6px; }
+    .cal-table { width: 100%; border-collapse: collapse; }
+    .cal-table th, .cal-table td { padding: 6px 9px; border-bottom: 1px solid #eee; text-align: left;
+                                   vertical-align: top; }
+    .cal-table th { font-size: .85em; color: #888; }
+    .cal-when { white-space: nowrap; color: #444; }
+    .cal-tag { font-size: .8em; padding: 1px 7px; border-radius: 10px; background: rgba(127,127,127,.15); }
+    .cal-scope { font-size: .78em; color: #c0392b; margin-left: 6px; }
+    @media (prefers-color-scheme: dark) {
+        .cal-sub, .cal-table th, .cal-table td { border-color: #333; }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+{% set catlabel = {'icpc': _('ICPC / regional'), 'regional': _('Regional site'),
+                   'training': _('Training'), 'meeting': _('Meeting'),
+                   'contest': _('Contest'), 'other': _('Event')} %}
+
+<div class="cal-sub">
+    <b>{{ _('Subscribe to the public calendar') }}</b>
+    <p class="cal-note">
+        {% trans %}Public contests and public events. Add it to your own calendar and it updates
+        by itself when new events are added.{% endtrans %}
+    </p>
+    <p>
+        <a class="cal-btn" href="{{ ical_url|replace('https://', 'webcal://')|replace('http://', 'webcal://') }}">
+            {{ _('Add to calendar app') }}</a>
+        <a class="cal-btn" href="{{ ical_url }}">{{ _('Download .ics') }}</a>
+        <button class="cal-btn" onclick="navigator.clipboard.writeText('{{ ical_url }}'); this.textContent='{{ _('Copied') }}';">
+            {{ _('Copy link') }}</button>
+    </p>
+    <p class="cal-note"><code>{{ ical_url }}</code></p>
+    <p class="cal-note">
+        {% trans %}To add it in Google Calendar, paste the link into "Other calendars → From URL".
+        Note that Google may take up to a day to show new events; the website here is always
+        up to date.{% endtrans %}
+    </p>
+</div>
+
+{% if items %}
+    <table class="cal-table">
+        <thead>
+            <tr>
+                <th>{{ _('When') }}</th>
+                <th>{{ _('Event') }}</th>
+                <th>{{ _('Type') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for it in items %}
+                <tr>
+                    <td class="cal-when">
+                        {% if it.all_day %}
+                            {{ it.start|date("D d/m/Y") }}
+                        {% else %}
+                            {{ it.start|date("D d/m/Y, H:i") }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if it.url %}
+                            <a href="{{ it.url }}">{{ it.title }}</a>
+                        {% else %}
+                            {{ it.title }}
+                        {% endif %}
+                        {% if it.location %}<div class="cal-note">{{ it.location }}</div>{% endif %}
+                        {% if it.obj and it.obj.visibility != 'P' %}
+                            <span class="cal-scope">
+                                {% if it.obj.visibility == 'O' %}{{ _('class only') }}
+                                {% else %}{{ _('internal') }}{% endif %}
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td><span class="cal-tag">{{ catlabel.get(it.category, it.category) }}</span></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>{{ _('No upcoming events.') }}</p>
+{% endif %}
+{% endblock %}

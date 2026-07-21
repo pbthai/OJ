@@ -1,0 +1,32 @@
+{# Sidebox lịch ở cột phải trang chủ: vài sự kiện sắp tới, ĐÃ lọc theo người
+   đang xem (contest riêng của lớp và sự kiện nội bộ chỉ hiện với người có quyền,
+   xem hcmus/calendar.py). #}
+{% if calendar_upcoming %}
+    <div class="blog-sidebox sidebox">
+        <h3>{{ _('Calendar') }} <i class="fa fa-calendar"></i></h3>
+        <div class="sidebox-content">
+            <ul class="problem-list">
+                {% for it in calendar_upcoming %}
+                    <li>
+                        {% if it.url %}
+                            <a href="{{ it.url }}">{{ it.title }}</a>
+                        {% else %}
+                            {{ it.title }}
+                        {% endif %}
+                        <br>
+                        <span class="time">
+                            {% if it.all_day %}
+                                {{ it.start|date("d/m/Y") }}
+                            {% else %}
+                                {{ it.start|date("d/m, H:i") }}
+                            {% endif %}
+                        </span>
+                    </li>
+                {% endfor %}
+            </ul>
+            <div style="text-align: right; font-size: smaller;">
+                <a href="{{ url('hcmus_calendar') }}">{{ _('Full calendar') }} &raquo;</a>
+            </div>
+        </div>
+    </div>
+{% endif %}

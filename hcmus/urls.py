@@ -14,4 +14,6 @@ urlpatterns = [
     path('suc-khoe/may-cham/<str:name>/', views.health_judge_toggle, name='hcmus_judge_toggle'),
     path('xep-hang/', views.ranking_list, name='hcmus_ranking_list'),
     path('xep-hang/<slug:slug>/', views.ranking_detail, name='hcmus_ranking_detail'),
+    path('lich/', views.calendar_page, name='hcmus_calendar'),
+    path('lich/cong-khai.ics', views.calendar_ical, name='hcmus_calendar_ical'),
 ]

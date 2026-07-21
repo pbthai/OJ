@@ -1,0 +1,30 @@
+{# Bảng "tăng rating trong tuần" ở cột phải. weekly_top là list (profile, mức tăng)
+   dựng từ bảng Rating (hcmus/calendar.py:weekly_rating_gain). Chỉ hiện khi có
+   người thực sự tăng rating trong 7 ngày. #}
+{% if weekly_top %}
+    <div class="blog-sidebox sidebox">
+        <h3>{{ _('Rating gained this week') }} <i class="fa fa-arrow-up"></i></h3>
+        <div class="sidebox-content" style="padding: unset; border: unset;">
+            <table class="users-table table" style="margin-bottom: unset;">
+                <thead>
+                    <tr>
+                        <th class="header rank" style="border-top-left-radius: unset; padding: 4px 9px;"> # </th>
+                        <th class="header username">{{ _('Username') }}</th>
+                        <th class="header points" style="border-top-right-radius: unset;"> {{ _('Gain') }} </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for profile, gain in weekly_top %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td class="user-name">
+                                <div style="float: left">{{ link_user(profile) }}</div>
+                            </td>
+                            <td class="user-points">+{{ gain }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
