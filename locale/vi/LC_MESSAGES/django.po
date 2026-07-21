@@ -9392,3 +9392,92 @@ msgstr "Nạp vào danh sách"
 #: hcmus/admin.py
 msgid "Added %(n)d post(s). Untick \"visible\" on a section to hide it from the home page."
 msgstr "Đã nạp %(n)d bài. Bỏ tick \"đang hiện\" ở một khối để ẩn khối đó khỏi trang chủ."
+
+# FIT-HCMUS: lịch trang chủ
+
+msgid "Full calendar"
+msgstr "Lịch đầy đủ"
+
+msgid "Rating gained this week"
+msgstr "Tăng rating trong tuần"
+
+msgid "Gain"
+msgstr "Mức tăng"
+
+msgid "Subscribe to the public calendar"
+msgstr "Đăng ký lịch công khai"
+
+msgid "Public contests and public events. Add it to your own calendar and it updates by itself when new events are added."
+msgstr "Các kỳ thi và sự kiện công khai. Thêm vào lịch cá nhân của bạn, lịch sẽ tự cập nhật khi có sự kiện mới."
+
+msgid "Add to calendar app"
+msgstr "Thêm vào ứng dụng lịch"
+
+msgid "Download .ics"
+msgstr "Tải .ics"
+
+msgid "Copied"
+msgstr "Đã chép"
+
+msgid "Copy link"
+msgstr "Chép liên kết"
+
+msgid "To add it in Google Calendar, paste the link into \"Other calendars, From URL\". Google may take up to a day to show new events; the website here is always up to date."
+msgstr "Để thêm vào Google Calendar, dán liên kết vào \"Lịch khác, Từ URL\". Google có thể mất tới một ngày mới hiện sự kiện mới; còn trang web ở đây luôn cập nhật ngay."
+
+msgid "Event"
+msgstr "Sự kiện"
+
+msgid "class only"
+msgstr "chỉ lớp"
+
+msgid "internal"
+msgstr "nội bộ"
+
+msgid "No upcoming events."
+msgstr "Chưa có sự kiện sắp tới."
+
+msgid "ICPC / regional"
+msgstr "ICPC / khu vực"
+
+msgid "Regional site"
+msgstr "Site khu vực"
+
+msgid "Training"
+msgstr "Tập huấn"
+
+msgid "Meeting"
+msgstr "Họp"
+
+msgid "Training session"
+msgstr "Buổi tập huấn"
+
+msgid "Contest (non-system)"
+msgstr "Kỳ thi (ngoài hệ thống)"
+
+msgid "Public — anyone can see it, including in the subscribe feed"
+msgstr "Công khai — ai cũng xem được, kể cả qua link đăng ký"
+
+msgid "Class — only members of the chosen classes"
+msgstr "Theo lớp — chỉ thành viên các lớp được chọn"
+
+msgid "Internal — only people with the \"view internal calendar\" permission"
+msgstr "Nội bộ — chỉ người có quyền \"xem lịch nội bộ\""
+
+msgid "calendar event"
+msgstr "sự kiện lịch"
+
+msgid "calendar events"
+msgstr "sự kiện lịch"
+
+msgid "View internal calendar events"
+msgstr "Xem sự kiện lịch nội bộ"
+
+msgid "all day"
+msgstr "cả ngày"
+
+msgid "classes"
+msgstr "các lớp"
+
+msgid "Who can see it"
+msgstr "Ai xem được"

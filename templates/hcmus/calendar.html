@@ -29,8 +29,7 @@
 <div class="cal-sub">
     <b>{{ _('Subscribe to the public calendar') }}</b>
     <p class="cal-note">
-        {% trans %}Public contests and public events. Add it to your own calendar and it updates
-        by itself when new events are added.{% endtrans %}
+        {{ _('Public contests and public events. Add it to your own calendar and it updates by itself when new events are added.') }}
     </p>
     <p>
         <a class="cal-btn" href="{{ ical_url|replace('https://', 'webcal://')|replace('http://', 'webcal://') }}">
@@ -41,9 +40,7 @@
     </p>
     <p class="cal-note"><code>{{ ical_url }}</code></p>
     <p class="cal-note">
-        {% trans %}To add it in Google Calendar, paste the link into "Other calendars → From URL".
-        Note that Google may take up to a day to show new events; the website here is always
-        up to date.{% endtrans %}
+        {{ _('To add it in Google Calendar, paste the link into "Other calendars, From URL". Google may take up to a day to show new events; the website here is always up to date.') }}
     </p>
 </div>
 
