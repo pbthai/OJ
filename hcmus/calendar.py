@@ -60,9 +60,12 @@ def _event_items(user, since, until):
     return out
 
 
-def agenda(user, days_back=1, days_ahead=120):
+def agenda(user, days_back=1, days_ahead=365):
     """Danh sách sự kiện (contest + tay) mà user được xem, sắp theo thời gian.
-    Dùng cho trang lịch và cho sidebox. Mỗi phần tử là dict thống nhất hai nguồn."""
+    Dùng cho trang lịch và cho sidebox. Mỗi phần tử là dict thống nhất hai nguồn.
+
+    Cửa sổ mặc định một năm: mùa giải ICPC/Olympic trải dài cả năm học, cắt ngắn
+    hơn sẽ giấu mất cụm sự kiện tháng 11-12 (Vòng Quốc gia, ICPC Đà Nẵng, OLP)."""
     now = timezone.now()
     since = now - timezone.timedelta(days=days_back)
     until = now + timezone.timedelta(days=days_ahead)
