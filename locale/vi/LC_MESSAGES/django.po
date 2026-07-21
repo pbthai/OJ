@@ -9481,3 +9481,9 @@ msgstr "các lớp"
 
 msgid "Who can see it"
 msgstr "Ai xem được"
+
+msgid "No rating changes this week yet."
+msgstr "Chưa có thay đổi rating tuần này."
+
+msgid "No ranked users yet."
+msgstr "Chưa có ai được xếp rating."

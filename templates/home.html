@@ -2,6 +2,12 @@
 {% block sidebar_extra %}
     {% include "hcmus/calendar-sidebox.html" %}
     {% include "hcmus/featured-rankings.html" %}
+{% endblock %}
+{# Thay cụm xếp hạng mặc định của vnoj bằng box của mình (luôn hiện): top rating
+   mọi thời + tăng rating trong tuần. Bỏ top-contrib khỏi trang chủ theo thiết kế
+   cột phải mới. #}
+{% block sidebar_leaderboards %}
+    {% include "hcmus/top-rating.html" %}
     {% include "hcmus/weekly-top.html" %}
 {% endblock %}
 {% block main_column_top %}{% include "hcmus/home-sections.html" %}{% endblock %}

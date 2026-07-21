@@ -1,0 +1,41 @@
+{# Top rating mọi thời (cột phải trang chủ). LUÔN hiện. Dùng lại top_rated_users
+   mà PostList đã tính (judge/views/blog.py). Trống khi chưa contest nào được rate. #}
+<div class="blog-sidebox sidebox">
+    <h3>{{ _('Top users') }} <i class="fa fa-trophy"></i></h3>
+    <div class="sidebox-content" style="padding: unset; border: unset;">
+        {% if top_rated_users %}
+            <table class="users-table table" style="margin-bottom: unset;">
+                <thead>
+                    <tr>
+                        <th class="header rank" style="border-top-left-radius: unset; padding: 4px 9px;"> # </th>
+                        <th class="header username">{{ _('Username') }}</th>
+                        <th class="header points" style="border-top-right-radius: unset;"> {{ _('Rating') }} </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in top_rated_users %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td class="user-name">
+                                <div style="float: left">{{ link_user(user) }}</div>
+                            </td>
+                            <td class="user-points {{ user.css_class }}">{{ user.rating }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="position: relative; font-size: smaller;">
+                <table class="table bottom">
+                    <tbody>
+                        <tr>
+                            <td class="left"><a href="{{ url('organization_list') }}">{{ _('Organizations') }}</a></td>
+                            <td class="right"><a href="{{ url('user_list') }}">{{ _('View all') }} &raquo;</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="time" style="padding: 8px 10px;">{{ _('No ranked users yet.') }}</p>
+        {% endif %}
+    </div>
+</div>

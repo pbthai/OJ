@@ -1,10 +1,9 @@
-{# Bảng "tăng rating trong tuần" ở cột phải. weekly_top là list (profile, mức tăng)
-   dựng từ bảng Rating (hcmus/calendar.py:weekly_rating_gain). Chỉ hiện khi có
-   người thực sự tăng rating trong 7 ngày. #}
-{% if weekly_top %}
-    <div class="blog-sidebox sidebox">
-        <h3>{{ _('Rating gained this week') }} <i class="fa fa-arrow-up"></i></h3>
-        <div class="sidebox-content" style="padding: unset; border: unset;">
+{# Bảng "tăng rating trong tuần" ở cột phải. LUÔN hiện; weekly_top là list
+   (profile, mức tăng) dựng từ bảng Rating (hcmus/calendar.py:weekly_rating_gain). #}
+<div class="blog-sidebox sidebox">
+    <h3>{{ _('Rating gained this week') }} <i class="fa fa-arrow-up"></i></h3>
+    <div class="sidebox-content" style="padding: unset; border: unset;">
+        {% if weekly_top %}
             <table class="users-table table" style="margin-bottom: unset;">
                 <thead>
                     <tr>
@@ -25,6 +24,8 @@
                     {% endfor %}
                 </tbody>
             </table>
-        </div>
+        {% else %}
+            <p class="time" style="padding: 8px 10px;">{{ _('No rating changes this week yet.') }}</p>
+        {% endif %}
     </div>
-{% endif %}
+</div>

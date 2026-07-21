@@ -164,12 +164,17 @@
                     </div>
                 </div>
             {% endif %}
-            {% if top_rated_users %}
-                {% include "blog/top-rating.html" %}
-            {% endif %}
-            {% if top_contrib %}
-                {% include "blog/top-contrib.html" %}
-            {% endif %}
+            {# FIT-HCMUS: bọc cụm xếp hạng cột phải trong một block để trang chủ
+               thay bằng box của mình (luôn hiện, có trạng thái rỗng). Trang khác
+               giữ nguyên hành vi vnoj. #}
+            {% block sidebar_leaderboards %}
+                {% if top_rated_users %}
+                    {% include "blog/top-rating.html" %}
+                {% endif %}
+                {% if top_contrib %}
+                    {% include "blog/top-contrib.html" %}
+                {% endif %}
+            {% endblock %}
             <div class="blog-sidebox sidebox">
                 <h3 style="display: flex; justify-content: space-between; white-space: nowrap;">
                     <span style="margin-right: 10px;">
