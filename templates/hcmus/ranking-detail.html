@@ -30,5 +30,38 @@
         {% endif %}
     </p>
 
+    {% if filter_orgs %}
+        <div class="rk-filter" style="margin: 10px 0;">
+            <label>{{ _('Filter by organization') }}:
+                <select id="rk-org-filter">
+                    <option value="">{{ _('All') }}</option>
+                    {% for o in filter_orgs %}
+                        <option value="{{ o }}">{{ o }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <span id="rk-filter-count" class="rk-pen" style="margin-left: 8px;"></span>
+        </div>
+    {% endif %}
+
     {% include "hcmus/ranking-table.html" %}
+
+    {% if filter_orgs %}
+        <script>
+            (function () {
+                var sel = document.getElementById('rk-org-filter');
+                var cnt = document.getElementById('rk-filter-count');
+                if (!sel) return;
+                sel.addEventListener('change', function () {
+                    var v = this.value, shown = 0;
+                    document.querySelectorAll('.rk-table tbody tr').forEach(function (tr) {
+                        var ok = !v || tr.getAttribute('data-org') === v;
+                        tr.style.display = ok ? '' : 'none';
+                        if (ok) shown++;
+                    });
+                    cnt.textContent = v ? (shown + ' {{ _('teams') }}') : '';
+                });
+            })();
+        </script>
+    {% endif %}
 {% endblock %}

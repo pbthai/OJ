@@ -270,6 +270,8 @@ def ranking_detail(request, slug):
         'ranking_contests': rcs,
         'can_edit': obj.is_editable_by(request.user),
         'mixed_units': obj.mixed_penalty_units,
+        # Các org có mặt để dựng nút lọc (giống lọc org của scoreboard contest).
+        'filter_orgs': sorted({r['org'] for r in rows if r.get('org')}),
     })
 
 

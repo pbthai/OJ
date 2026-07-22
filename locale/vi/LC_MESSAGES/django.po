@@ -9547,3 +9547,11 @@ msgstr[0] "Đã thêm %d thành viên."
 msgid "%d user was already a member."
 msgid_plural "%d users were already members."
 msgstr[0] "%d người đã là thành viên rồi."
+
+# FIT-HCMUS: lọc org bảng xếp hạng team
+
+msgid "Filter by organization"
+msgstr "Lọc theo tổ chức"
+
+msgid "%(n)s teams"
+msgstr "%(n)s đội"

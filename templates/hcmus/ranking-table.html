@@ -24,7 +24,7 @@
     </thead>
     <tbody>
     {% for row in (rows[:limit] if limit else rows) %}
-        <tr class="{% if row.honour %}rk-honour{% endif %} {% if ranking.hall_of_fame and row.honour and not loop.last and not rows[loop.index].honour %}rk-cut{% endif %}">
+        <tr data-org="{{ row.org }}" class="{% if row.honour %}rk-honour{% endif %} {% if ranking.hall_of_fame and row.honour and not loop.last and not rows[loop.index].honour %}rk-cut{% endif %}">
             <td class="rk-rank">
                 {% if row.medal == 'gold' %}<i class="fa fa-trophy rk-medal rk-gold" title="{{ _('1st place') }}"></i>
                 {% elif row.medal == 'silver' %}<i class="fa fa-trophy rk-medal rk-silver" title="{{ _('2nd place') }}"></i>
