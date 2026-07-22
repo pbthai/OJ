@@ -364,6 +364,10 @@ DMOJ_NEWSLETTER_ID_ON_REGISTER = None
 
 BAD_MAIL_PROVIDERS = ()
 BAD_MAIL_PROVIDER_REGEX = ()
+# Lúc đăng ký, kiểm tra tên miền email có nhận được thư không (tra MX/A). Chặn tên
+# miền gõ nhầm hoặc đã chết -> bắt nhập lại thay vì để link kích hoạt bị bounce.
+# Đặt False nếu server không ra ngoài DNS được (khi đó tra cứu hỏng cũng không chặn ai).
+REGISTRATION_VALIDATE_EMAIL_DELIVERABILITY = True
 NOFOLLOW_EXCLUDED = set()
 
 TIMEZONE_MAP = 'https://static.dmoj.ca/assets/earth.jpg'

@@ -23,6 +23,85 @@ from judge.widgets import Select2MultipleWidget, Select2Widget
 bad_mail_regex = list(map(re.compile, settings.BAD_MAIL_PROVIDER_REGEX))
 
 
+# Tên miền chắc chắn sống, dùng làm "canary" để phân biệt "tên miền người dùng gõ
+# bị hỏng" với "DNS của server đang chết". Chỉ cần một cái phân giải được là biết
+# resolver còn chạy.
+_MAIL_DNS_CANARIES = ('gmail.com', 'hcmus.edu.vn')
+
+
+def _domain_mail_lookup(domain):
+    """Tra DNS THÔ cho một tên miền. Trả True (nhận thư được), False (chắc chắn
+    không), None (không tra cứu được: timeout/SERVFAIL/không có dnspython)."""
+    try:
+        import dns.exception
+        import dns.resolver
+    except ImportError:
+        # Không có dnspython: lùi về getaddrinfo (chỉ thấy A/AAAA). Bỏ sót tên miền
+        # chỉ-MX (hiếm) nên chỉ dùng để bắt tên miền không phân giải ra gì cả.
+        import socket
+        try:
+            socket.getaddrinfo(domain, None)
+            return True
+        except socket.gaierror:
+            return False
+        except OSError:
+            return None
+
+    resolver = dns.resolver.Resolver()
+    resolver.timeout = resolver.lifetime = 5.0
+
+    def query(rdtype):
+        try:
+            return bool(len(resolver.resolve(domain, rdtype)))
+        except dns.resolver.NoAnswer:
+            return False               # tên miền có thật nhưng không có bản ghi này
+        except dns.resolver.NXDOMAIN:
+            return 'nxdomain'          # tên miền không tồn tại
+        except (dns.resolver.NoNameservers, dns.exception.DNSException):
+            return None                # SERVFAIL/timeout -> chưa kết luận được
+
+    mx = query('MX')
+    if mx is True:
+        return True
+    if mx == 'nxdomain':
+        return False
+    if mx is None:
+        return None
+    # Không có MX: RFC 5321 cho phép chuyển thư tới A/AAAA (implicit MX).
+    for rdtype in ('A', 'AAAA'):
+        got = query(rdtype)
+        if got is True:
+            return True
+        if got is None:
+            return None
+    return False
+
+
+def email_domain_accepts_mail(domain):
+    """Tên miền của email có nhận được thư không?
+
+    Trả về True (nhận được), False (chắc chắn không -> bắt gõ lại), hoặc None
+    (không xác định được vì DNS của server đang hỏng -> phía gọi nên fail-open).
+
+    Đây là lý do phần lớn email sai lọt lưới: cú pháp đúng nhưng tên miền gõ nhầm
+    (gmail.con) hoặc là địa chỉ dùng-một-lần đã chết. Ví dụ thực tế toaik.com trong
+    log bounce trả SERVFAIL (nameserver hỏng) nên thư không bao giờ tới — trường hợp
+    này KHÔNG để lọt: nếu canary còn phân giải được thì kết luận chính tên miền kia
+    hỏng và chặn; chỉ khi đến canary cũng tra không ra mới coi là DNS server chết và
+    cho qua.
+    """
+    domain = (domain or '').strip().rstrip('.')
+    if not domain:
+        return False
+    verdict = _domain_mail_lookup(domain)
+    if verdict is not None:
+        return verdict
+    # Không xác định được cho tên miền này. Kiểm resolver có còn sống không.
+    if any(_domain_mail_lookup(c) is True for c in _MAIL_DNS_CANARIES):
+        return False   # resolver chạy tốt -> chính tên miền người dùng nhập hỏng
+    return None        # canary cũng hỏng -> DNS server chết -> fail-open, đừng chặn
+
+
 class CustomRegistrationForm(RegistrationForm):
     username = forms.RegexField(regex=re.compile(r'^\w+$', re.ASCII), max_length=30, label=_('Username'),
                                 error_messages={'invalid': _('A username must contain letters, '
@@ -52,6 +131,17 @@ class CustomRegistrationForm(RegistrationForm):
                     any(regex.match(domain) for regex in bad_mail_regex)):
                 raise forms.ValidationError(gettext('Your email provider is not allowed due to history of abuse. '
                                                     'Please use a reputable email provider.'))
+            # Chặn email không gửi tới được (tên miền gõ nhầm hoặc đã chết): nếu
+            # tên miền không có chỗ nhận thư thì bắt nhập lại ngay, thay vì để link
+            # kích hoạt bị bounce và tài khoản treo. Chỉ chặn khi CHẮC CHẮN sai
+            # (False); tra cứu hỏng (None) thì cho qua để DNS chập chờn không cản
+            # người dùng thật. Tắt được qua settings nếu server thiếu DNS ra ngoài.
+            if getattr(settings, 'REGISTRATION_VALIDATE_EMAIL_DELIVERABILITY', True):
+                if email_domain_accepts_mail(domain) is False:
+                    raise forms.ValidationError(
+                        gettext('We could not find a mail server for “%s”. Please check the '
+                                'address for typos and enter an email that can receive messages.')
+                        % domain)
         return self.cleaned_data['email']
 
     def clean_organizations(self):
