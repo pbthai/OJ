@@ -98,26 +98,10 @@ def upcoming(user, limit=6):
 
 # --- Lưới lịch tháng cho trang /lich/ --------------------------------------
 
-def month_grid(user, year, month):
-    """Ma trận tháng để render như lịch chuẩn: danh sách tuần, mỗi tuần 7 ô ngày.
-
-    Mỗi ô: {date, in_month, is_today, events}. Sự kiện nhiều ngày xuất hiện ở MỌI
-    ô nó phủ, kèm cờ is_start/is_end để template bo góc cho ra dải liền.
-
-    Ngày cả lưới gồm cả ô đệm của tháng trước/sau (monthdatescalendar), nên tuần
-    nào cũng đủ 7 ô — không phải xử lý ô trống.
-    """
-    cal = _pycalendar.Calendar(firstweekday=0)   # 0 = Thứ Hai
-    weeks_dates = cal.monthdatescalendar(year, month)
-    first, last = weeks_dates[0][0], weeks_dates[-1][-1]
-
-    tz = timezone.get_current_timezone()
-    since = timezone.make_aware(_datetime.datetime.combine(first, _datetime.time.min), tz)
-    until = timezone.make_aware(
-        _datetime.datetime.combine(last + _datetime.timedelta(days=1), _datetime.time.min), tz)
-
+def _spans_for(user, since, until):
+    """Quy mỗi sự kiện (contest + tay) về khoảng NGÀY LỊCH nó phủ, theo tz đang
+    active. Trả list (ngày_đầu, ngày_cuối, item) để dựng lưới."""
     items = _contest_items(user, since, until) + _event_items(user, since, until)
-    # Quy mỗi item về khoảng NGÀY LỊCH nó phủ (theo tz đang active).
     spans = []
     for it in items:
         s = timezone.localdate(it['start'])
@@ -125,8 +109,14 @@ def month_grid(user, year, month):
         if e < s:
             e = s
         spans.append((s, e, it))
+    return spans
 
-    today = timezone.localdate()
+
+def _weeks_from_spans(weeks_dates, spans, month, today):
+    """Dựng danh sách tuần (mỗi tuần 7 ô) cho một tháng từ spans đã tính sẵn.
+
+    Mỗi ô: {date, in_month, is_today, events}. Sự kiện nhiều ngày xuất hiện ở MỌI
+    ô nó phủ, kèm cờ is_start/is_end để template bo góc cho ra dải liền."""
     weeks = []
     for wk in weeks_dates:
         cells = []
@@ -144,6 +134,49 @@ def month_grid(user, year, month):
                           'is_today': d == today, 'events': day_events})
         weeks.append(cells)
     return weeks
+
+
+def month_grid(user, year, month):
+    """Ma trận MỘT tháng để render như lịch chuẩn (danh sách tuần, mỗi tuần 7 ô).
+
+    Ô đệm của tháng trước/sau (monthdatescalendar) nên tuần nào cũng đủ 7 ô."""
+    cal = _pycalendar.Calendar(firstweekday=0)   # 0 = Thứ Hai
+    weeks_dates = cal.monthdatescalendar(year, month)
+    first, last = weeks_dates[0][0], weeks_dates[-1][-1]
+    tz = timezone.get_current_timezone()
+    since = timezone.make_aware(_datetime.datetime.combine(first, _datetime.time.min), tz)
+    until = timezone.make_aware(
+        _datetime.datetime.combine(last + _datetime.timedelta(days=1), _datetime.time.min), tz)
+    spans = _spans_for(user, since, until)
+    return _weeks_from_spans(weeks_dates, spans, month, timezone.localdate())
+
+
+def months_grids(user, n=12):
+    """n lưới tháng LIÊN TIẾP tính từ tháng hiện tại, để trang lịch cuộn dọc xem
+    cả năm thay vì bấm next từng tháng.
+
+    Lấy sự kiện MỘT lần cho cả dải n tháng rồi dựng từng lưới — tránh n lần quét DB.
+    Trả list dict {year, month, weeks}."""
+    today = timezone.localdate()
+    cal = _pycalendar.Calendar(firstweekday=0)
+    months = []
+    y, m = today.year, today.month
+    for _ in range(n):
+        months.append((y, m, cal.monthdatescalendar(y, m)))
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+
+    first = months[0][2][0][0]
+    last = months[-1][2][-1][-1]
+    tz = timezone.get_current_timezone()
+    since = timezone.make_aware(_datetime.datetime.combine(first, _datetime.time.min), tz)
+    until = timezone.make_aware(
+        _datetime.datetime.combine(last + _datetime.timedelta(days=1), _datetime.time.min), tz)
+    spans = _spans_for(user, since, until)
+
+    return [{'year': yy, 'month': mm, 'weeks': _weeks_from_spans(wd, spans, mm, today)}
+            for yy, mm, wd in months]
 
 
 # --- Feed .ics công khai (không phân quyền, chỉ phần PUBLIC) ----------------
