@@ -263,6 +263,25 @@ def ranking_detail(request, slug):
         # 404 chứ không 403: bảng riêng tư thì sự TỒN TẠI của nó cũng không nên lộ
         raise Http404()
     rows, rcs = compute_ranking(obj)
+
+    # Lọc org, phân quyền theo NGƯỜI XEM. Trang này render từng request (khác
+    # scoreboard contest dùng cache chung), nên hiện được đúng org mỗi người thấy:
+    # org công khai HOẶC org họ là thành viên. Superuser / người sửa bảng xem hết.
+    # Giấu tên org private khỏi người không thấy được, cả ở dòng lẫn ở dropdown.
+    from judge.models import Organization
+    user = request.user
+    if user.is_superuser or obj.is_editable_by(user):
+        visible = None
+    else:
+        visible = set(Organization.objects.filter(is_unlisted=False)
+                      .values_list('short_name', flat=True))
+        if user.is_authenticated:
+            visible |= set(user.profile.organizations.values_list('short_name', flat=True))
+    if visible is not None:
+        for r in rows:
+            if r['org'] and r['org'] not in visible:
+                r['org'] = ''
+
     return render(request, 'hcmus/ranking-detail.html', {
         'title': obj.name,
         'ranking': obj,
@@ -270,7 +289,7 @@ def ranking_detail(request, slug):
         'ranking_contests': rcs,
         'can_edit': obj.is_editable_by(request.user),
         'mixed_units': obj.mixed_penalty_units,
-        # Các org có mặt để dựng nút lọc (giống lọc org của scoreboard contest).
+        # Org có mặt để dựng nút lọc, đã lọc theo quyền người xem ở trên.
         'filter_orgs': sorted({r['org'] for r in rows if r.get('org')}),
     })
 
