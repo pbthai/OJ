@@ -48,6 +48,23 @@
 {% block title_ruler %}{% endblock %}
 
 {% block users_table %}
+    {% include "messages.html" %}
+    {% if is_admin %}
+        <div class="add-member-panel" style="border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;">
+            <form action="{{ url('organization_add_member', organization.slug) }}" method="post"
+                  enctype="multipart/form-data">
+                {% csrf_token %}
+                <b>{{ _('Add members') }}</b>
+                <textarea name="usernames" rows="2" style="width: 100%; margin: 6px 0;"
+                          placeholder="{{ _('Usernames, separated by spaces, commas or new lines') }}"></textarea>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span>{{ _('or upload a text file:') }}</span>
+                    <input type="file" name="usernames_file" accept=".txt,text/plain">
+                    <button type="submit">{{ _('Add') }}</button>
+                </div>
+            </form>
+        </div>
+    {% endif %}
     {% set table_id='organization-users-table' %}
     {% include "organization/users-table.html" %}
 {% endblock %}

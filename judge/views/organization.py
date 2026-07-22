@@ -565,6 +565,63 @@ class KickUserWidgetView(LoginRequiredMixin, AdminOrganizationMixin, SingleObjec
         return HttpResponseRedirect(organization.get_users_url())
 
 
+class AddOrganizationMember(LoginRequiredMixin, AdminOrganizationMixin, SingleObjectMixin, View):
+    """Org admin chủ động thêm thành viên: dán danh sách username hoặc tải file.
+
+    Fork gốc chỉ có luồng user tự xin vào + admin kick, không có đường THÊM. Bù chỗ
+    đó. Gác bằng AdminOrganizationMixin (admin của chính lớp, hoặc quyền
+    edit_all_organization), giống KickUserWidgetView.
+    """
+    model = Organization
+    context_object_name = 'organization'
+    MAX_FILE = 512 * 1024
+
+    def post(self, request, *args, **kwargs):
+        import re
+
+        organization = self.organization
+
+        raw = request.POST.get('usernames', '') or ''
+        upload = request.FILES.get('usernames_file')
+        if upload:
+            if upload.size > self.MAX_FILE:
+                return generic_message(request, _("Can't add members"),
+                                       _('The uploaded file is too large.'), status=400)
+            raw += '\n' + upload.read().decode('utf-8', 'ignore')
+
+        # Tách theo khoảng trắng, xuống dòng, phẩy, chấm phẩy — dán từ Excel hay từ
+        # danh sách lớp đều vào được. Bỏ trùng, giữ thứ tự.
+        names, seen = [], set()
+        for n in re.split(r'[\s,;]+', raw.strip()):
+            if n and n not in seen:
+                seen.add(n)
+                names.append(n)
+        if not names:
+            return generic_message(request, _("Can't add members"),
+                                   _('No usernames were given.'), status=400)
+
+        found = {p.user.username: p for p in
+                 Profile.objects.filter(user__username__in=names).select_related('user')}
+        already = set(organization.members.filter(id__in=[p.id for p in found.values()])
+                      .values_list('user__username', flat=True))
+        to_add = [p for uname, p in found.items() if uname not in already]
+        missing = [n for n in names if n not in found]
+
+        if to_add:
+            organization.members.add(*to_add)
+            organization.on_user_changes()   # cập nhật member_count + điểm tổng
+            messages.success(request, ngettext(
+                'Added %d member.', 'Added %d members.', len(to_add)) % len(to_add))
+        if already:
+            messages.info(request, ngettext(
+                '%d user was already a member.', '%d users were already members.',
+                len(already)) % len(already))
+        if missing:
+            messages.warning(request, _('These usernames were not found: %s')
+                             % ', '.join(missing[:50]))
+        return HttpResponseRedirect(organization.get_users_url())
+
+
 # using PublicOrganizationMixin to allow user to view org's public information
 # like name, request join org, ...
 # However, they cannot see the organization private blog

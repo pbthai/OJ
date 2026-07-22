@@ -9516,3 +9516,34 @@ msgstr "Về tháng hiện tại"
 
 msgid "Other"
 msgstr "Khác"
+
+# FIT-HCMUS: thêm thành viên tổ chức
+
+msgid "Add members"
+msgstr "Thêm thành viên"
+
+msgid "Usernames, separated by spaces, commas or new lines"
+msgstr "Tên đăng nhập, cách nhau bằng dấu cách, dấu phẩy hoặc xuống dòng"
+
+msgid "or upload a text file:"
+msgstr "hoặc tải lên một file văn bản:"
+
+msgid "Can't add members"
+msgstr "Không thêm được thành viên"
+
+msgid "The uploaded file is too large."
+msgstr "File tải lên quá lớn."
+
+msgid "No usernames were given."
+msgstr "Chưa nhập tên đăng nhập nào."
+
+msgid "These usernames were not found: %s"
+msgstr "Không tìm thấy các tên đăng nhập: %s"
+
+msgid "Added %d member."
+msgid_plural "Added %d members."
+msgstr[0] "Đã thêm %d thành viên."
+
+msgid "%d user was already a member."
+msgid_plural "%d users were already members."
+msgstr[0] "%d người đã là thành viên rồi."

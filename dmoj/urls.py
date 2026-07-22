@@ -301,6 +301,7 @@ urlpatterns = [
         path('/quota/<int:quota_id>/delete', organization.OrganizationQuotaDelete.as_view(),
              name='organization_quota_delete'),
         path('/kick', organization.KickUserWidgetView.as_view(), name='organization_user_kick'),
+        path('/add-member', organization.AddOrganizationMember.as_view(), name='organization_add_member'),
         path('/usage', organization.OrganizationStorageDashboard.as_view(), name='organization_monthly_usage'),
         path('/problems/', organization.ProblemListOrganization.as_view(), name='problem_list_organization'),
         path('/problems/bulk-delete', organization.BulkDeleteOrganizationProblems.as_view(),
