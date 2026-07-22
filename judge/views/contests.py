@@ -863,8 +863,14 @@ def make_contest_ranking_json(contest, problems, queryset, frozen=False):
     _org_url_tpl = reverse('organization_home', args=['__SLUG__'])
 
     # Subqueries for the user's first organisation (replicates Profile.organization).
+    # FIT-HCMUS: KHÔNG lọc is_unlisted ở đây. Org lớp/trường mặc định is_unlisted=True,
+    # mà bộ lọc org trên bảng xếp hạng được JS dựng từ chính nhãn org trong các dòng
+    # (getOrganizationCodes, ranking.html:221) — lọc bỏ org unlisted thì mọi dòng
+    # không có nhãn org, dropdown lọc rỗng. is_unlisted vốn chỉ có nghĩa "ẩn khỏi
+    # DANH SÁCH tổ chức công khai", không phải giấu thành viên; ở đây tên đội đã có
+    # sẵn tiền tố trường (HCMUS-, LHP-...) nên hiện short_name org không lộ gì thêm.
     _org_qs = Organization.objects.filter(
-        member=OuterRef('user'), is_unlisted=False,
+        member=OuterRef('user'),
     ).order_by('name')
 
     queryset = queryset.annotate(
