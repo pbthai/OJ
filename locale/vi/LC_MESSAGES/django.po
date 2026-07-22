@@ -9487,3 +9487,32 @@ msgstr "Chưa có thay đổi rating tuần này."
 
 msgid "No ranked users yet."
 msgstr "Chưa có ai được xếp rating."
+
+# FIT-HCMUS: lịch lưới + đếm ngược
+
+msgid "Tue"
+msgstr "T3"
+
+msgid "Thu"
+msgstr "T5"
+
+msgid "today"
+msgstr "hôm nay"
+
+msgid "tomorrow"
+msgstr "ngày mai"
+
+msgid "happening now"
+msgstr "đang diễn ra"
+
+msgid "in %(n)s days"
+msgstr "còn %(n)s ngày"
+
+msgid "Month %(m)s, %(y)s"
+msgstr "Tháng %(m)s/%(y)s"
+
+msgid "Back to this month"
+msgstr "Về tháng hiện tại"
+
+msgid "Other"
+msgstr "Khác"

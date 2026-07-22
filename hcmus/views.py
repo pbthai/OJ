@@ -320,11 +320,37 @@ def calendar_ical(request):
 
 
 def calendar_page(request):
-    """Lịch đầy đủ, lọc theo đúng người đang xem. Contest tự vào theo quyền của họ,
-    cộng các sự kiện tay họ được xem. Ẩn danh chỉ thấy phần công khai."""
+    """Lịch dạng lưới tháng, lọc theo đúng người đang xem. Contest tự vào theo quyền
+    của họ, cộng các sự kiện tay họ được xem. Ẩn danh chỉ thấy phần công khai.
+
+    Điều hướng tháng qua ?month=YYYY-MM; không hợp lệ thì về tháng hiện tại."""
+    import datetime as dt
+
     from hcmus import calendar as cal
+
+    today = timezone.localdate()
+    year, month = today.year, today.month
+    raw = (request.GET.get('month') or '').strip()
+    try:
+        d = dt.datetime.strptime(raw, '%Y-%m')
+        if 2000 <= d.year <= 2100:
+            year, month = d.year, d.month
+    except ValueError:
+        pass   # thiếu hoặc sai định dạng -> giữ tháng hiện tại
+
+    weeks = cal.month_grid(request.user, year, month)
+    first = dt.date(year, month, 1)
+    prev = (first - dt.timedelta(days=1)).replace(day=1)
+    nxt = (first + dt.timedelta(days=32)).replace(day=1)
+
     return render(request, 'hcmus/calendar.html', {
         'title': _('Calendar'),
-        'items': cal.agenda(request.user),
+        'weeks': weeks,
+        'cal_year': year,
+        'cal_month': month,
+        'prev_month': '%04d-%02d' % (prev.year, prev.month),
+        'next_month': '%04d-%02d' % (nxt.year, nxt.month),
+        'this_month': '%04d-%02d' % (today.year, today.month),
+        'is_current_month': (year, month) == (today.year, today.month),
         'ical_url': request.build_absolute_uri(reverse('hcmus_calendar_ical')),
     })

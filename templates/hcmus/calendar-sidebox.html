@@ -20,6 +20,7 @@
                             {% else %}
                                 {{ it.start|date("d/m, H:i") }}
                             {% endif %}
+                            ({% if it.ongoing %}{{ _('happening now') }}{% elif it.days_until == 0 %}{{ _('today') }}{% elif it.days_until == 1 %}{{ _('tomorrow') }}{% else %}{{ _('in %(n)s days', n=it.days_until) }}{% endif %})
                         </span>
                     </li>
                 {% endfor %}

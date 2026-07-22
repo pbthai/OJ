@@ -8,6 +8,9 @@ Cả hai đều lọc theo đúng người đang xem. Feed .ics công khai thì 
 công khai (contest công khai + sự kiện PUBLIC), vì công cụ lịch fetch feed không
 mang phiên đăng nhập nên không thể phân quyền theo người ở đó.
 """
+import calendar as _pycalendar
+import datetime as _datetime
+
 from django.utils import timezone
 
 from hcmus.models import CalendarEvent
@@ -75,11 +78,72 @@ def agenda(user, days_back=1, days_ahead=365):
 
 
 def upcoming(user, limit=6):
-    """Vài sự kiện sắp tới cho sidebox trang chủ. Chỉ lấy cái CHƯA kết thúc."""
+    """Vài sự kiện sắp tới cho sidebox trang chủ. Chỉ lấy cái CHƯA kết thúc.
+
+    Gắn thêm cho mỗi item:
+      - ongoing: đã bắt đầu mà chưa kết thúc (đang diễn ra)
+      - days_until: số NGÀY LỊCH tới lúc bắt đầu, tính theo múi giờ đang active
+        (localdate). Tính bằng ngày lịch chứ không phải hiệu giờ chia 24, để một
+        sự kiện 8h sáng mai luôn là "ngày mai" dù bây giờ là 20h.
+    """
     now = timezone.now()
+    today = timezone.localdate(now)
     items = [it for it in agenda(user, days_back=0, days_ahead=365)
              if (it['end'] or it['start']) >= now]
+    for it in items:
+        it['ongoing'] = it['start'] <= now
+        it['days_until'] = (timezone.localdate(it['start']) - today).days
     return items[:limit]
+
+
+# --- Lưới lịch tháng cho trang /lich/ --------------------------------------
+
+def month_grid(user, year, month):
+    """Ma trận tháng để render như lịch chuẩn: danh sách tuần, mỗi tuần 7 ô ngày.
+
+    Mỗi ô: {date, in_month, is_today, events}. Sự kiện nhiều ngày xuất hiện ở MỌI
+    ô nó phủ, kèm cờ is_start/is_end để template bo góc cho ra dải liền.
+
+    Ngày cả lưới gồm cả ô đệm của tháng trước/sau (monthdatescalendar), nên tuần
+    nào cũng đủ 7 ô — không phải xử lý ô trống.
+    """
+    cal = _pycalendar.Calendar(firstweekday=0)   # 0 = Thứ Hai
+    weeks_dates = cal.monthdatescalendar(year, month)
+    first, last = weeks_dates[0][0], weeks_dates[-1][-1]
+
+    tz = timezone.get_current_timezone()
+    since = timezone.make_aware(_datetime.datetime.combine(first, _datetime.time.min), tz)
+    until = timezone.make_aware(
+        _datetime.datetime.combine(last + _datetime.timedelta(days=1), _datetime.time.min), tz)
+
+    items = _contest_items(user, since, until) + _event_items(user, since, until)
+    # Quy mỗi item về khoảng NGÀY LỊCH nó phủ (theo tz đang active).
+    spans = []
+    for it in items:
+        s = timezone.localdate(it['start'])
+        e = timezone.localdate(it['end']) if it['end'] else s
+        if e < s:
+            e = s
+        spans.append((s, e, it))
+
+    today = timezone.localdate()
+    weeks = []
+    for wk in weeks_dates:
+        cells = []
+        for d in wk:
+            day_events = []
+            for s, e, it in spans:
+                if s <= d <= e:
+                    day_events.append({
+                        'title': it['title'], 'category': it['category'],
+                        'url': it['url'], 'all_day': it['all_day'], 'start': it['start'],
+                        'is_start': d == s, 'is_end': d == e, 'multi': e > s,
+                    })
+            day_events.sort(key=lambda ev: (not ev['is_start'], ev['start']))
+            cells.append({'date': d, 'in_month': d.month == month,
+                          'is_today': d == today, 'events': day_events})
+        weeks.append(cells)
+    return weeks
 
 
 # --- Feed .ics công khai (không phân quyền, chỉ phần PUBLIC) ----------------

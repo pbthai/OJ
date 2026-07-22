@@ -8,81 +8,114 @@
                border-radius: 6px; padding: 3px 12px; font: inherit; font-size: .9em; cursor: pointer;
                text-decoration: none; margin-right: 6px; }
     .cal-note { color: #888; font-size: .88em; margin-top: 6px; }
-    .cal-table { width: 100%; border-collapse: collapse; }
-    .cal-table th, .cal-table td { padding: 6px 9px; border-bottom: 1px solid #eee; text-align: left;
-                                   vertical-align: top; }
-    .cal-table th { font-size: .85em; color: #888; }
-    .cal-when { white-space: nowrap; color: #444; }
-    .cal-tag { font-size: .8em; padding: 1px 7px; border-radius: 10px; background: rgba(127,127,127,.15); }
-    .cal-scope { font-size: .78em; color: #c0392b; margin-left: 6px; }
+
+    .cal-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 12px; }
+    .cal-nav a { text-decoration: none; padding: 3px 10px; border: 1px solid #ccc; border-radius: 6px; color: inherit; }
+    .cal-nav .cal-title { font-size: 1.25em; font-weight: 700; min-width: 8em; text-align: center; }
+    .cal-today-link { font-size: .85em; }
+
+    .cal-wrap { overflow-x: auto; }
+    table.cal-grid { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 640px; }
+    table.cal-grid th { padding: 6px 4px; font-size: .82em; color: #888; text-align: center;
+                        border: 1px solid #e5e5e5; }
+    table.cal-grid td { border: 1px solid #e5e5e5; vertical-align: top; height: 92px; width: 14.28%;
+                        padding: 3px 3px 4px; }
+    td.cal-out { background: rgba(127,127,127,.06); }
+    td.cal-out .cal-daynum { color: #bbb; }
+    .cal-daynum { font-size: .82em; color: #666; text-align: right; display: block; margin-bottom: 2px; }
+    td.cal-today { background: rgba(41,128,185,.10); }
+    td.cal-today .cal-daynum { color: #2980b9; font-weight: 700; }
+    td.cal-sun .cal-daynum { color: #c0392b; }
+
+    .cal-ev { display: block; font-size: .78em; line-height: 1.35; padding: 1px 6px; margin: 2px 0;
+              border-radius: 5px; color: #fff; text-decoration: none; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }
+    a.cal-ev:hover { opacity: .9; }
+    /* Sự kiện nhiều ngày: chỉ bo góc ở ô đầu và ô cuối để ra dải liền. */
+    .cal-ev.mid { border-radius: 0; margin-left: -3px; margin-right: -3px; padding-left: 8px; }
+    .cal-ev.start-only { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -3px; }
+    .cal-ev.end-only { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -3px; padding-left: 8px; }
+    .cal-ev-contest  { background: #2980b9; }
+    .cal-ev-icpc     { background: #c0392b; }
+    .cal-ev-regional { background: #d35400; }
+    .cal-ev-training { background: #27ae60; }
+    .cal-ev-meeting  { background: #8e44ad; }
+    .cal-ev-other    { background: #7f8c8d; }
+    .cal-cont { font-size: .78em; color: #888; padding-left: 6px; }
+
+    .cal-legend { margin-top: 12px; font-size: .82em; color: #888; }
+    .cal-legend span { display: inline-block; margin-right: 12px; }
+    .cal-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
     @media (prefers-color-scheme: dark) {
-        .cal-sub, .cal-table th, .cal-table td { border-color: #333; }
+        .cal-sub, table.cal-grid th, table.cal-grid td, .cal-nav a { border-color: #333; }
+        .cal-daynum { color: #aaa; }
     }
 </style>
 {% endblock %}
 
 {% block body %}
-{% set catlabel = {'icpc': _('ICPC / regional'), 'regional': _('Regional site'),
-                   'training': _('Training'), 'meeting': _('Meeting'),
-                   'contest': _('Contest'), 'other': _('Event')} %}
-
 <div class="cal-sub">
     <b>{{ _('Subscribe to the public calendar') }}</b>
     <p class="cal-note">
         {{ _('Public contests and public events. Add it to your own calendar and it updates by itself when new events are added.') }}
     </p>
     <p>
-        <a class="cal-btn" href="{{ ical_url|replace('https://', 'webcal://')|replace('http://', 'webcal://') }}">
-            {{ _('Add to calendar app') }}</a>
+        <a class="cal-btn" href="{{ ical_url|replace('https://', 'webcal://')|replace('http://', 'webcal://') }}">{{ _('Add to calendar app') }}</a>
         <a class="cal-btn" href="{{ ical_url }}">{{ _('Download .ics') }}</a>
-        <button class="cal-btn" onclick="navigator.clipboard.writeText('{{ ical_url }}'); this.textContent='{{ _('Copied') }}';">
-            {{ _('Copy link') }}</button>
+        <button class="cal-btn" onclick="navigator.clipboard.writeText('{{ ical_url }}'); this.textContent='{{ _('Copied') }}';">{{ _('Copy link') }}</button>
     </p>
     <p class="cal-note"><code>{{ ical_url }}</code></p>
-    <p class="cal-note">
-        {{ _('To add it in Google Calendar, paste the link into "Other calendars, From URL". Google may take up to a day to show new events; the website here is always up to date.') }}
-    </p>
 </div>
 
-{% if items %}
-    <table class="cal-table">
+<div class="cal-nav">
+    <a href="?month={{ prev_month }}" rel="nofollow">&laquo;</a>
+    <span class="cal-title">
+        {{ _('Month %(m)s, %(y)s', m=cal_month, y=cal_year) }}
+        {% if not is_current_month %}
+            <br><a class="cal-today-link" href="?month={{ this_month }}" rel="nofollow">{{ _('Back to this month') }}</a>
+        {% endif %}
+    </span>
+    <a href="?month={{ next_month }}" rel="nofollow">&raquo;</a>
+</div>
+
+<div class="cal-wrap">
+    <table class="cal-grid">
         <thead>
             <tr>
-                <th>{{ _('When') }}</th>
-                <th>{{ _('Event') }}</th>
-                <th>{{ _('Type') }}</th>
+                <th>{{ _('Mon') }}</th><th>{{ _('Tue') }}</th><th>{{ _('Wed') }}</th>
+                <th>{{ _('Thu') }}</th><th>{{ _('Fri') }}</th><th>{{ _('Sat') }}</th>
+                <th style="color:#c0392b">{{ _('Sun') }}</th>
             </tr>
         </thead>
         <tbody>
-            {% for it in items %}
+            {% for week in weeks %}
                 <tr>
-                    <td class="cal-when">
-                        {% if it.all_day %}
-                            {{ it.start|date("D d/m/Y") }}
-                        {% else %}
-                            {{ it.start|date("D d/m/Y, H:i") }}
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if it.url %}
-                            <a href="{{ it.url }}">{{ it.title }}</a>
-                        {% else %}
-                            {{ it.title }}
-                        {% endif %}
-                        {% if it.location %}<div class="cal-note">{{ it.location }}</div>{% endif %}
-                        {% if it.obj and it.obj.visibility != 'P' %}
-                            <span class="cal-scope">
-                                {% if it.obj.visibility == 'O' %}{{ _('class only') }}
-                                {% else %}{{ _('internal') }}{% endif %}
-                            </span>
-                        {% endif %}
-                    </td>
-                    <td><span class="cal-tag">{{ catlabel.get(it.category, it.category) }}</span></td>
+                    {% for cell in week %}
+                        <td class="{% if not cell.in_month %}cal-out{% endif %} {% if cell.is_today %}cal-today{% endif %} {% if cell.date.weekday() == 6 %}cal-sun{% endif %}">
+                            <span class="cal-daynum">{{ cell.date.day }}</span>
+                            {% for ev in cell.events %}
+                                {% set cls = 'cal-ev cal-ev-' ~ ev.category %}
+                                {% if ev.multi %}{% if ev.is_start %}{% set cls = cls ~ ' start-only' %}{% elif ev.is_end %}{% set cls = cls ~ ' end-only' %}{% else %}{% set cls = cls ~ ' mid' %}{% endif %}{% endif %}
+                                {% if ev.url %}
+                                    <a class="{{ cls }}" href="{{ ev.url }}" title="{{ ev.title }}">{% if ev.is_start %}{% if not ev.all_day %}{{ ev.start|date("H:i") }} {% endif %}{{ ev.title }}{% else %}&nbsp;{% endif %}</a>
+                                {% else %}
+                                    <span class="{{ cls }}" title="{{ ev.title }}">{% if ev.is_start %}{% if not ev.all_day %}{{ ev.start|date("H:i") }} {% endif %}{{ ev.title }}{% else %}&nbsp;{% endif %}</span>
+                                {% endif %}
+                            {% endfor %}
+                        </td>
+                    {% endfor %}
                 </tr>
             {% endfor %}
         </tbody>
     </table>
-{% else %}
-    <p>{{ _('No upcoming events.') }}</p>
-{% endif %}
+</div>
+
+<div class="cal-legend">
+    <span><i style="background:#2980b9"></i>{{ _('Contest') }}</span>
+    <span><i style="background:#c0392b"></i>{{ _('ICPC / regional') }}</span>
+    <span><i style="background:#d35400"></i>{{ _('Regional site') }}</span>
+    <span><i style="background:#27ae60"></i>{{ _('Training') }}</span>
+    <span><i style="background:#8e44ad"></i>{{ _('Meeting') }}</span>
+    <span><i style="background:#7f8c8d"></i>{{ _('Other') }}</span>
+</div>
 {% endblock %}
