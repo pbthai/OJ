@@ -9310,7 +9310,7 @@ msgstr "Bài blog"
 
 #: hcmus/models.py hcmus/admin.py
 msgid "Team ranking"
-msgstr "Bảng xếp hạng"
+msgstr "Bảng vàng"
 
 #: hcmus/models.py hcmus/admin.py
 msgid "Custom content"
@@ -9350,7 +9350,7 @@ msgstr "Xem bảng đầy đủ"
 
 #: hcmus/models.py hcmus/admin.py
 msgid "Team rankings"
-msgstr "Bảng xếp hạng"
+msgstr "Bảng vàng"
 
 #: hcmus/models.py hcmus/admin.py
 msgid "setter"

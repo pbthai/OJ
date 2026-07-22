@@ -1,8 +1,10 @@
 {% extends "blog/list.html" %}
 {% block sidebar_extra %}
-    {% include "hcmus/calendar-sidebox.html" %}
     {% include "hcmus/featured-rankings.html" %}
+    {% include "hcmus/calendar-sidebox.html" %}
 {% endblock %}
+{# Trang chủ bỏ khối "Dòng bình luận". #}
+{% block sidebar_comments %}{% endblock %}
 {# Thay cụm xếp hạng mặc định của vnoj bằng box của mình (luôn hiện): top rating
    mọi thời + tăng rating trong tuần. Bỏ top-contrib khỏi trang chủ theo thiết kế
    cột phải mới. #}

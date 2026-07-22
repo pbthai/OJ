@@ -175,6 +175,8 @@
                     {% include "blog/top-contrib.html" %}
                 {% endif %}
             {% endblock %}
+            {# FIT-HCMUS: bọc khối "Dòng bình luận" để trang chủ ẩn được, trang blog khác giữ nguyên. #}
+            {% block sidebar_comments %}
             <div class="blog-sidebox sidebox">
                 <h3 style="display: flex; justify-content: space-between; white-space: nowrap;">
                     <span style="margin-right: 10px;">
@@ -206,6 +208,7 @@
                     </span>
                 </div>
             </div>
+            {% endblock %}
             <div class="blog-sidebox sidebox">
                 <h3>{{ _('New problems') }} <i class="fa fa-puzzle-piece"></i>
                 </h3>
