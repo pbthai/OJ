@@ -1,0 +1,17 @@
+{# Ô cột phải: bài mới. Luôn hiện (vnoj để cố định ở cuối), có RSS/Atom. #}
+<div class="blog-sidebox sidebox">
+    <h3>{{ _('New problems') }} <i class="fa fa-puzzle-piece"></i>
+    </h3>
+    <div class="sidebox-content">
+        <ul class="problem-list">
+            {% for problem in new_problems %}
+                <li><a href="{{ url('problem_detail', problem.code) }}">{{ problem.name }}</a></li>
+            {% endfor %}
+        </ul>
+        <span class="rssatom">
+            <a href="{{ url('problem_rss') }}"><span><i class="fa fa-rss"></i></span> RSS</a>
+            /
+            <a href="{{ url('problem_atom') }}">Atom</a>
+        </span>
+    </div>
+</div>

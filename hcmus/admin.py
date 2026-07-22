@@ -17,7 +17,8 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from hcmus.models import CalendarEvent, HomeSection, JudgeSwitch, PermSet, Ranking, RankingContest
+from hcmus.models import (CalendarEvent, HomeSection, JudgeSwitch, PermSet, Ranking,
+                          RankingContest, SidebarSection)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -305,6 +306,42 @@ class HomeSectionAdmin(SortableAdminMixin, admin.ModelAdmin):
         n = self._do_import()
         self.message_user(request, _('Added %(n)d post(s). Untick "visible" on a section to hide '
                                      'it from the home page.') % {'n': n})
+
+
+@admin.register(SidebarSection)
+class SidebarSectionAdmin(SortableAdminMixin, admin.ModelAdmin):
+    """Kéo thả sắp thứ tự cột phải trang chủ, bật/tắt từng ô.
+
+    Cùng ràng buộc SortableAdminMixin như HomeSectionAdmin (xem chú thích ở đó):
+    model có Meta.ordering số nguyên, không đưa 'order' vào form, has_change_permission
+    giữ obj=None mặc định. Gác bằng chính quyền quản lý trang chủ (*_homesection) —
+    ai sắp được cột chính thì sắp luôn cột phải, khỏi phải cấu hình thêm vai trò.
+
+    Không cho thêm/xoá: danh sách ô là cố định theo code, người dùng chỉ sắp lại và
+    bật/tắt. Thêm tay một ô lạ (kind không có template) sẽ vỡ khi render.
+    """
+    ordering = ('order',)
+    list_display = ('__str__', 'kind', 'is_visible')
+    list_filter = ('is_visible',)
+
+    def _may(self, request, action):
+        return (request.user.is_active and
+                request.user.has_perm(f'hcmus.{action}_homesection'))
+
+    def has_module_permission(self, request):
+        return any(self._may(request, a) for a in ('view', 'change'))
+
+    def has_view_permission(self, request, obj=None):
+        return self._may(request, 'view') or self._may(request, 'change')
+
+    def has_change_permission(self, request, obj=None):
+        return self._may(request, 'change')
+
+    def has_add_permission(self, request):
+        return False        # danh sách ô cố định theo code, chỉ sắp lại + bật/tắt
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class PermSetForm(ModelForm):

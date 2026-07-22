@@ -1,0 +1,21 @@
+{# Ô cột phải: vé hỗ trợ đang mở của chính người xem. Tự ẩn khi rỗng. #}
+{% if own_open_tickets %}
+    <div class="blog-sidebox sidebox">
+        <h3>{{ _('My open tickets') }} <i class="fa fa-question-circle"></i></h3>
+        <div class="sidebox-content">
+            <ul class="own-open-tickets">
+                {% for ticket in own_open_tickets %}
+                    <li>
+                        <div class="title">
+                            <a href="{{ url('ticket', ticket.id) }}">{{ ticket.title }}</a>
+                        </div>
+                        <div class="object">
+                            <a href="{{ ticket.linked_item.get_absolute_url() }}">
+                                {{ ticket.linked_item|item_title|truncatechars_html(30) }}</a>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endif %}

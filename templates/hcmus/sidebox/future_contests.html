@@ -1,0 +1,18 @@
+{# Ô cột phải: kỳ thi sắp tới. Tự ẩn khi rỗng. #}
+{% if future_contests %}
+    <div class="blog-sidebox sidebox">
+        <h3>{{ _('Upcoming contests') }} <i class="fa fa-trophy"></i></h3>
+        <div class="sidebox-content">
+            {% for contest in future_contests %}
+                <div class="contest">
+                    <div class="contest-list-title">
+                        <a href="{{ url('contest_view', contest.key) }}">{{ contest.name }}</a>
+                    </div>
+                    <div class="time">
+                        {{ _('Starting in %(countdown)s.', countdown=as_countdown(contest.time_before_start)) }}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}

@@ -36,7 +36,7 @@ class Ranking(models.Model):
 
     name = models.CharField(max_length=100, verbose_name=_('name'))
     slug = models.SlugField(max_length=64, unique=True, verbose_name=_('identifier'),
-                            help_text=_('Used in the URL, e.g. /xep-hang/&lt;identifier&gt;/'))
+                            help_text=_('Used in the URL, e.g. /bang-vang/&lt;identifier&gt;/'))
     description = models.TextField(blank=True, verbose_name=_('description'),
                                    help_text=_('Shown above the table. Markdown is allowed.'))
     visibility = models.CharField(max_length=1, choices=VISIBILITY, default=HIDDEN,
@@ -293,6 +293,70 @@ def _rc_setters_changed(sender, instance, action, **kwargs):
 def _teams_changed(sender, instance, action, **kwargs):
     if action in ('post_add', 'post_remove', 'post_clear'):
         _touch_ranking(instance.id)
+
+
+class SidebarSection(models.Model):
+    """Một ô ở cột phải trang chủ, thứ tự và bật/tắt do admin kéo thả.
+
+    Khác HomeSection (cột chính, trỏ tới một đối tượng cụ thể), model này chỉ sắp
+    lại các ô CÓ SẴN của cột phải: bảng vàng, lịch, vé hỗ trợ, kỳ thi, top rating,
+    bài mới. Mỗi ô ứng với một template phần ở templates/hcmus/sidebox/<kind>.html.
+    Không có FK tới nội dung — nội dung mỗi ô tự lấy từ context của trang.
+
+    Bản thân ô vẫn tự ẩn khi rỗng (ví dụ 'vé mới' chỉ hiện với staff): việc đó do
+    {% if %} trong template phần lo. `is_visible` ở đây là công tắc admin tắt hẳn ô
+    đó khỏi trang chủ, không phụ thuộc rỗng hay không.
+    """
+    HALL_OF_FAME = 'hall_of_fame'
+    CALENDAR = 'calendar'
+    MY_TICKETS = 'my_tickets'
+    NEW_TICKETS = 'new_tickets'
+    CURRENT_CONTESTS = 'current_contests'
+    FUTURE_CONTESTS = 'future_contests'
+    TOP_RATING = 'top_rating'
+    WEEKLY_RATING = 'weekly_rating'
+    NEW_PROBLEMS = 'new_problems'
+    KINDS = (
+        (HALL_OF_FAME, _('Hall of fame (featured team rankings)')),
+        (CALENDAR, _('Calendar (upcoming events)')),
+        (MY_TICKETS, _('My open tickets')),
+        (NEW_TICKETS, _('New tickets (staff only)')),
+        (CURRENT_CONTESTS, _('Ongoing contests')),
+        (FUTURE_CONTESTS, _('Upcoming contests')),
+        (TOP_RATING, _('Top rating (all time)')),
+        (WEEKLY_RATING, _('Rating gained this week')),
+        (NEW_PROBLEMS, _('New problems')),
+    )
+    # Thứ tự mặc định lúc gieo hạt (xem data migration). Đây cũng là danh sách
+    # "chuẩn" để bù các ô còn thiếu nếu về sau thêm loại mới mà chưa gieo.
+    DEFAULT_ORDER = (HALL_OF_FAME, CALENDAR, MY_TICKETS, NEW_TICKETS,
+                     CURRENT_CONTESTS, FUTURE_CONTESTS, TOP_RATING,
+                     WEEKLY_RATING, NEW_PROBLEMS)
+
+    kind = models.CharField(max_length=32, choices=KINDS, unique=True, verbose_name=_('box'))
+    is_visible = models.BooleanField(default=True, verbose_name=_('visible'))
+    # SortableAdminMixin đọc tên field này từ Meta.ordering[0] để kéo thả sắp thứ tự.
+    order = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_('order'))
+
+    class Meta:
+        verbose_name = _('home sidebar box')
+        verbose_name_plural = _('home sidebar boxes')
+        ordering = ['order']   # BẮT BUỘC: thiếu là SortableAdminMixin ném ImproperlyConfigured
+
+    def __str__(self):
+        return self.get_kind_display()
+
+    @classmethod
+    def render_kinds(cls):
+        """Danh sách kind đang bật, theo đúng thứ tự admin đã sắp.
+
+        Bù các loại chưa có bản ghi (thêm loại mới trong code nhưng chưa gieo hạt)
+        vào cuối, để không bao giờ mất ô chỉ vì quên chạy migration."""
+        rows = list(cls.objects.all())
+        known = {r.kind for r in rows}
+        ordered = [r.kind for r in rows if r.is_visible]
+        ordered += [k for k in cls.DEFAULT_ORDER if k not in known]
+        return ordered
 
 
 class PermSet(models.Model):

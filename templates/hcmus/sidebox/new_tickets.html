@@ -1,0 +1,22 @@
+{# Ô cột phải: vé mới cần xử lý (chỉ staff có open_tickets). Tự ẩn khi rỗng. #}
+{% if open_tickets %}
+    <div class="blog-sidebox sidebox">
+        <h3>{{ _('New tickets') }} <i class="fa fa-exclamation-circle"></i></h3>
+        <div class="sidebox-content">
+            <ul class="open-tickets">
+                {% for ticket in open_tickets %}
+                    <li>
+                        <div class="title">
+                            <a href="{{ url('ticket', ticket.id) }}">{{ ticket.title }}</a>
+                        </div>
+                        <div class="object">
+                            <a href="{{ ticket.linked_item.get_absolute_url() }}">
+                                {{ ticket.linked_item|item_title|truncatechars_html(30) }}</a>
+                        </div>
+                        <div class="author">{{ link_user(ticket.user) }}</div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endif %}

@@ -85,6 +85,10 @@
         </div>
 
         <div class="blog-sidebar">
+            {# FIT-HCMUS: bọc TOÀN BỘ cột phải trong một block để trang chủ thay bằng
+               danh sách ô đã sắp thứ tự (xem home.html + model SidebarSection). Trang
+               blog/tin tức khác giữ nguyên thứ tự mặc định của vnoj. #}
+            {% block sidebar_content %}
             {# FIT-HCMUS: chỗ móc cho khối phụ ở đầu sidebar (trang chủ dùng cho bảng xếp hạng nổi bật) #}
             {% block sidebar_extra %}{% endblock %}
             {% if own_open_tickets %}
@@ -225,6 +229,7 @@
                     </span>
                 </div>
             </div>
+            {% endblock %}
         </div>
     </div>
     {% block after_posts %}{% endblock %}

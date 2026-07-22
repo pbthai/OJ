@@ -1,16 +1,13 @@
 {% extends "blog/list.html" %}
-{% block sidebar_extra %}
-    {% include "hcmus/featured-rankings.html" %}
-    {% include "hcmus/calendar-sidebox.html" %}
-{% endblock %}
-{# Trang chủ bỏ khối "Dòng bình luận". #}
-{% block sidebar_comments %}{% endblock %}
-{# Thay cụm xếp hạng mặc định của vnoj bằng box của mình (luôn hiện): top rating
-   mọi thời + tăng rating trong tuần. Bỏ top-contrib khỏi trang chủ theo thiết kế
-   cột phải mới. #}
-{% block sidebar_leaderboards %}
-    {% include "hcmus/top-rating.html" %}
-    {% include "hcmus/weekly-top.html" %}
+{# Cột phải trang chủ: render các ô theo đúng thứ tự + trạng thái bật/tắt admin đã
+   sắp (model SidebarSection, sidebar_kinds bơm từ judge/views/blog.py). Mỗi kind
+   ứng với một partial hcmus/sidebox/<kind>.html; "ignore missing" để một kind lạ
+   (chưa có template) không làm vỡ cả trang. Thay hẳn cụm block sidebar_extra/
+   sidebar_comments/sidebar_leaderboards cũ — giờ mọi ô đều đi qua vòng lặp này. #}
+{% block sidebar_content %}
+    {% for kind in sidebar_kinds or [] %}
+        {% include "hcmus/sidebox/" ~ kind ~ ".html" ignore missing %}
+    {% endfor %}
 {% endblock %}
 {% block main_column_top %}{% include "hcmus/home-sections.html" %}{% endblock %}
 {% block before_posts %}

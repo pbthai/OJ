@@ -278,8 +278,11 @@ class PostList(PostListBase):
         context['home_sections'] = []
         context['pinned_post_ids'] = []
         context['hide_blog_feed'] = False
+        # Thứ tự các ô cột phải. Mặc định rỗng -> home.html không render gì thừa nếu
+        # app hcmus tắt; khi bật thì lấy đúng thứ tự admin đã kéo thả.
+        context['sidebar_kinds'] = []
         try:
-            from hcmus.models import HomeSection, Ranking
+            from hcmus.models import HomeSection, Ranking, SidebarSection
             from hcmus.ranking import compute_cached
 
             context['featured_rankings'] = list(
@@ -291,6 +294,9 @@ class PostList(PostListBase):
             from hcmus import calendar as hcmus_cal
             context['calendar_upcoming'] = hcmus_cal.upcoming(self.request.user, limit=12)
             context['weekly_top'] = hcmus_cal.weekly_rating_gain(limit=8)
+
+            # Thứ tự + bật/tắt các ô cột phải (kéo thả trong admin).
+            context['sidebar_kinds'] = SidebarSection.render_kinds()
 
             sections = HomeSection.for_user(self.request.user)
             for s in sections:
