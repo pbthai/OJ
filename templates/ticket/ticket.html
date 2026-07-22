@@ -158,7 +158,12 @@
                 ace.edit('martor-body').setValue(message);
             }
 
-            const AUTOFILL_OPTIONS = {{ autofill_replies|default("[]") }}
+            {# |safe BẮT BUỘC: autofill_replies là json.dumps() từ settings (tin cậy).
+               Thiếu |safe thì autoescape đổi " thành &#34;, JS lỗi cú pháp, cả block
+               script chết -> handler .close-ticket không bind -> nút Đóng ticket im.
+               Chỉ hiện với người xem KHÁC người tạo (ticket.py:214), tức đúng
+               admin/assignee cần đóng ticket. #}
+            const AUTOFILL_OPTIONS = {{ autofill_replies|default("[]")|safe }}
 
             var selectedIdx = null;
 
