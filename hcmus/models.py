@@ -690,3 +690,25 @@ class CalendarEvent(models.Model):
         if user.has_perm('hcmus.view_internal_calendar'):
             cond |= Q(visibility=cls.INTERNAL)
         return cls.objects.filter(cond).distinct()
+
+
+class UserScore(models.Model):
+    """Điểm động của một người dùng: tổng r của các bài đã AC (xem hcmus/scoring.py).
+
+    Bảng RIÊNG, cố ý KHÔNG đụng tới points/performance_points gốc của DMOJ (những
+    cái đó gắn với contest và bảng rank sẵn có). Tính lại định kỳ 3h sáng bằng cron
+    gọi `manage.py hcmus_recompute_scores`, hoặc chạy tay lệnh đó bất cứ lúc nào.
+    """
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE,
+                                   related_name='dynamic_score', verbose_name=_('user'))
+    points = models.FloatField(default=0, verbose_name=_('points'))
+    solved = models.PositiveIntegerField(default=0, verbose_name=_('problems solved'))
+    updated = models.DateTimeField(verbose_name=_('last updated'))
+
+    class Meta:
+        verbose_name = _('user score')
+        verbose_name_plural = _('user scores')
+        ordering = ['-points', 'profile__user__username']
+
+    def __str__(self):
+        return f'{self.profile} — {self.points:g}'

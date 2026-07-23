@@ -18,7 +18,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from hcmus.models import (CalendarEvent, HomeSection, JudgeSwitch, PermSet, Ranking,
-                          RankingContest, SidebarSection)
+                          RankingContest, SidebarSection, UserScore)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -477,6 +477,58 @@ class PermSetAdmin(SortableAdminMixin, admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return self._root(request)
+
+
+@admin.register(UserScore)
+class UserScoreAdmin(admin.ModelAdmin):
+    """Bảng điểm động — CHỈ XEM. Số liệu do `hcmus_recompute_scores` tính (cron 3h
+    sáng), không sửa tay. Có nút chạy lại ngay để khỏi đợi cron."""
+    list_display = ('username', 'points', 'solved', 'updated')
+    search_fields = ('profile__user__username',)
+    ordering = ('-points',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('profile__user')
+
+    @admin.display(description=_('user'), ordering='profile__user__username')
+    def username(self, obj):
+        return obj.profile.user.username
+
+    # Chỉ xem: không thêm/sửa/xoá tay (số liệu là kết quả tính ra).
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    # Nút "tính lại ngay" theo đúng khuôn nút import của HomeSection: thêm URL riêng
+    # + lời nhắc kèm link ở đầu trang danh sách (bulk action không dùng được vì
+    # trang chỉ-xem không có ô chọn dòng).
+    def get_urls(self):
+        from django.urls import path
+        return [path('recompute/', self.admin_site.admin_view(self.recompute_view),
+                     name='hcmus_userscore_recompute')] + super().get_urls()
+
+    def recompute_view(self, request):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        from hcmus.scoring import recompute_user_scores
+        n = recompute_user_scores()
+        self.message_user(request, _('Recomputed scores for %(n)d users.') % {'n': n})
+        return HttpResponseRedirect(reverse('admin:hcmus_userscore_changelist'))
+
+    def changelist_view(self, request, extra_context=None):
+        from django.urls import reverse
+        self.message_user(request, format_html(
+            '{} <a href="{}"><b>{}</b></a>',
+            _('Scores refresh nightly at 3am.'),
+            reverse('admin:hcmus_userscore_recompute'),
+            _('Recompute now')), messages.INFO)
+        return super().changelist_view(request, extra_context)
 
 
 @admin.register(JudgeSwitch)
