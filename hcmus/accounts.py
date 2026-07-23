@@ -33,8 +33,10 @@ HEADER_ALIASES = {
     'name': 'name', 'fullname': 'name', 'hoten': 'name', 'team': 'name',
     'school': 'school', 'truong': 'school', 'org': 'school', 'donvi': 'school',
     'email': 'email', 'mail': 'email', 'thu': 'email',
+    # Phòng thi: CHỈ để in lên phiếu (xếp phiếu theo phòng). Không đụng tài khoản.
+    'room': 'room', 'phong': 'room', 'phongthi': 'room', 'lab': 'room',
 }
-COLS = ['username', 'password', 'name', 'school', 'email']
+COLS = ['username', 'password', 'name', 'school', 'email', 'room']
 
 
 def gen_pass():
@@ -107,7 +109,7 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
 
     for row in rows:
         username = row['username']
-        name, school, email = row['name'], row['school'], row['email']
+        name, school, email, room = row['name'], row['school'], row['email'], row['room']
         if not email and email_domain:
             email = f'{username}@{email_domain}'
         password = row['password'] or gen_pass()
@@ -152,7 +154,7 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
                     status = 'đổi mật khẩu'
 
                 results.append({'username': username, 'password': password, 'name': name,
-                                'school': school, 'email': email, 'status': status})
+                                'school': school, 'email': email, 'room': room, 'status': status})
         except Exception as e:  # noqa: BLE001  một dòng hỏng không được làm sập cả mẻ
             results.append({**skip, 'status': f'LỖI: {e}'})
 
@@ -163,7 +165,9 @@ def results_csv(results):
     """Kết quả -> chuỗi CSV (utf-8-sig để Excel mở đúng tiếng Việt)."""
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(['username', 'password', 'name', 'school', 'email', 'status'])
+    w.writerow(['username', 'password', 'name', 'school', 'email', 'room', 'status'])
     for r in results:
-        w.writerow([r['username'], r['password'], r['name'], r['school'], r['email'], r['status']])
+        w.writerow([r.get('username', ''), r.get('password', ''), r.get('name', ''),
+                    r.get('school', ''), r.get('email', ''), r.get('room', ''),
+                    r.get('status', '')])
     return '﻿' + buf.getvalue()

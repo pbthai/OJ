@@ -388,11 +388,14 @@ def accounts_page(request):
     from hcmus import slips
 
     mode = request.POST.get('mode', 'create')
-    if mode not in ('create', 'reset'):
+    if mode not in ('create', 'reset', 'slips'):
         mode = 'create'
-    need = 'auth.add_user' if mode == 'create' else 'auth.change_user'
-    if not request.user.has_perm(need):
-        raise PermissionDenied()
+    # slips = chỉ in phiếu, KHÔNG đụng DB (dùng khi tài khoản nằm ở contest/trang
+    # khác). Chỉ cần quyền mở trang; create/reset mới cần quyền ghi tài khoản.
+    if mode in ('create', 'reset'):
+        need = 'auth.add_user' if mode == 'create' else 'auth.change_user'
+        if not request.user.has_perm(need):
+            raise PermissionDenied()
 
     # Nguồn dữ liệu: ưu tiên file tải lên, không thì ô dán text.
     text = ''
@@ -413,12 +416,18 @@ def accounts_page(request):
         ctx['error'] = _('Chưa có dữ liệu: dán danh sách vào ô hoặc tải file lên.')
         return render(request, 'hcmus/accounts.html', ctx)
 
-    results = acc.run_batch(
-        text, mode,
-        org_slug=request.POST.get('org', '').strip(),
-        display_name=bool(request.POST.get('display_name')),
-        email_domain=request.POST.get('email_domain', '').strip(),
-    )
+    if mode == 'slips':
+        # Không tạo/đổi gì: đọc thẳng danh sách rồi in phiếu (cần có sẵn password).
+        results = acc.parse_rows(text)
+        for r in results:
+            r['status'] = 'chỉ in phiếu'
+    else:
+        results = acc.run_batch(
+            text, mode,
+            org_slug=request.POST.get('org', '').strip(),
+            display_name=bool(request.POST.get('display_name')),
+            email_domain=request.POST.get('email_domain', '').strip(),
+        )
     if not results:
         ctx['error'] = _('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
         return render(request, 'hcmus/accounts.html', ctx)
@@ -443,6 +452,6 @@ def accounts_page(request):
             z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
     buf.seek(0)
     resp = HttpResponse(buf.getvalue(), content_type='application/zip')
-    fname = f'{"tao-moi" if mode == "create" else "doi-matkhau"}-{changed}-tk.zip'
-    resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+    prefix = {'create': 'tao-moi', 'reset': 'doi-matkhau', 'slips': 'phieu'}[mode]
+    resp['Content-Disposition'] = f'attachment; filename="{prefix}-{changed}-tk.zip"'
     return resp

@@ -51,6 +51,13 @@ def _draw_slip(pdf, x, y, row, title, contest, url, index, total):
     pdf.line(cx, line_y + 1, x + CELL_W - pad, line_y + 1)
 
     ty = line_y + 4.5
+    room = (row.get('room') or '').strip()
+    if room:                                            # phòng thi: nổi bật, dễ xếp phiếu
+        pdf.set_xy(cx, ty)
+        pdf.set_font('Sans', 'B', 10)
+        pdf.set_text_color(150, 60, 30)
+        pdf.cell(CELL_W - 2 * pad, 5, f'Phòng thi: {room}')
+        ty += 5.7
     if row.get('name'):
         pdf.set_xy(cx, ty)
         pdf.set_font('Sans', 'B', 12)
@@ -101,6 +108,10 @@ def make_slips_pdf(rows, title='FIT-HCMUS Online Judge', contest='',
     rows = [r for r in rows if r.get('username') and r.get('password')]
     if not rows:
         return None
+    # Xếp phiếu theo phòng để phát theo phòng cho tiện; phiếu không có phòng dồn
+    # xuống cuối. Sort ổn định nên trong cùng phòng vẫn giữ thứ tự nhập vào.
+    rows = sorted(rows, key=lambda r: (not (r.get('room') or '').strip(),
+                                       (r.get('room') or '').strip()))
     fonts = _fonts()
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(False)
