@@ -25,8 +25,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'Đã tính điểm cho {n} user ({scope}).'))
         top = options['top']
         if top > 0:
-            self.stdout.write(f'Top {top}:')
+            self.stdout.write(f'Top {top} (total = rating + điểm bài):')
             rows = UserScore.objects.select_related('profile__user')[:top]
             for i, s in enumerate(rows, 1):
+                rating = s.rating if s.rating is not None else '—'
                 self.stdout.write(f'  {i:2}. {s.profile.user.username:24} '
-                                  f'{s.points:8.2f}  ({s.solved} bài)')
+                                  f'total={s.total:8.2f}  (rating={rating}, '
+                                  f'điểm bài={s.points:g}, {s.solved} bài)')

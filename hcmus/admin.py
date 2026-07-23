@@ -481,11 +481,12 @@ class PermSetAdmin(SortableAdminMixin, admin.ModelAdmin):
 
 @admin.register(UserScore)
 class UserScoreAdmin(admin.ModelAdmin):
-    """Bảng điểm động — CHỈ XEM. Số liệu do `hcmus_recompute_scores` tính (cron 3h
-    sáng), không sửa tay. Có nút chạy lại ngay để khỏi đợi cron."""
-    list_display = ('username', 'points', 'solved', 'updated')
+    """Bảng xếp hạng — CHỈ XEM. total = contest rating + điểm giải bài. Số liệu do
+    `hcmus_recompute_scores` tính (cron 3h sáng), không sửa tay. Có nút chạy lại
+    ngay để khỏi đợi cron."""
+    list_display = ('username', 'total', 'rating', 'points', 'solved', 'updated')
     search_fields = ('profile__user__username',)
-    ordering = ('-points',)
+    ordering = ('-total',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('profile__user')

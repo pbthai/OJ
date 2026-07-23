@@ -693,22 +693,30 @@ class CalendarEvent(models.Model):
 
 
 class UserScore(models.Model):
-    """Điểm động của một người dùng: tổng r của các bài đã AC (xem hcmus/scoring.py).
+    """Điểm xếp hạng của một người dùng (xem hcmus/scoring.py).
 
-    Bảng RIÊNG, cố ý KHÔNG đụng tới points/performance_points gốc của DMOJ (những
-    cái đó gắn với contest và bảng rank sẵn có). Tính lại định kỳ 3h sáng bằng cron
-    gọi `manage.py hcmus_recompute_scores`, hoặc chạy tay lệnh đó bất cứ lúc nào.
+    total = rating thi đấu + điểm giải bài, dùng làm khoá xếp hạng:
+      - points: tổng r của các bài đã AC (r = 10/log2(n+2)).
+      - rating: ảnh chụp contest rating (Profile.rating) tại lúc tính; None nếu
+        chưa từng thi kỳ rated. Cộng thẳng theo yêu cầu, nên khi đã có rating thì
+        rating là phần chính, điểm giải bài là phần cộng thêm.
+      - total = points + (rating hoặc 0).
+
+    Bảng RIÊNG, cố ý KHÔNG đụng points/performance_points/rating gốc của DMOJ. Tính
+    lại 3h sáng bằng cron gọi `manage.py hcmus_recompute_scores`, hoặc chạy tay.
     """
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE,
                                    related_name='dynamic_score', verbose_name=_('user'))
-    points = models.FloatField(default=0, verbose_name=_('points'))
+    points = models.FloatField(default=0, verbose_name=_('problem points'))
+    rating = models.IntegerField(null=True, default=None, verbose_name=_('contest rating'))
+    total = models.FloatField(default=0, verbose_name=_('total'))
     solved = models.PositiveIntegerField(default=0, verbose_name=_('problems solved'))
     updated = models.DateTimeField(verbose_name=_('last updated'))
 
     class Meta:
         verbose_name = _('user score')
         verbose_name_plural = _('user scores')
-        ordering = ['-points', 'profile__user__username']
+        ordering = ['-total', 'profile__user__username']
 
     def __str__(self):
-        return f'{self.profile} — {self.points:g}'
+        return f'{self.profile} — {self.total:g}'

@@ -35,14 +35,18 @@ def problem_value(solvers):
 
 
 def recompute_user_scores(public_only=False):
-    """Tính lại toàn bộ bảng UserScore từ các submission AC. Trả về số user đã ghi.
+    """Tính lại toàn bộ bảng UserScore. Trả về số user đã ghi.
 
-    public_only=False (mặc định): tính MỌI bài đã tạo — đúng ý "các bài đã tạo",
-    và cần thiết ở deploy này vì phần lớn bài luyện tập để riêng (không công khai),
-    lọc theo công khai thì bảng gần như rỗng. True: chỉ tính bài công khai, không
-    riêng-cho-tổ-chức.
+    total = điểm giải bài + contest rating (Profile.rating). Người có rating NHƯNG
+    chưa giải bài nào vẫn được xếp; người có điểm bài NHƯNG chưa rated thì rating
+    để None và total = điểm bài. Hiện chưa contest nào rated nên total = điểm bài
+    với mọi người, sẽ tự khớp khi có kỳ rated.
+
+    public_only=False (mặc định): tính MỌI bài đã tạo — đúng ý "các bài đã tạo", và
+    cần thiết ở deploy này vì phần lớn bài luyện tập để riêng, lọc công khai thì
+    bảng gần như rỗng. True: chỉ tính bài công khai, không riêng-cho-tổ-chức.
     """
-    from judge.models import Problem, Submission
+    from judge.models import Problem, Profile, Submission
 
     from hcmus.models import UserScore
 
@@ -58,19 +62,29 @@ def recompute_user_scores(public_only=False):
              .filter(result='AC', user__is_unlisted=False, problem_id__in=value.keys())
              .values_list('user_id', 'problem_id').distinct())
 
-    totals = {}
+    points = {}   # user_id -> [điểm giải bài, số bài]
     for user_id, problem_id in pairs.iterator():
-        acc = totals.setdefault(user_id, [0.0, 0])
+        acc = points.setdefault(user_id, [0.0, 0])
         acc[0] += value[problem_id]
         acc[1] += 1
 
+    # Ảnh chụp contest rating (không tính user ẩn). Người có rating nhưng chưa giải
+    # bài cũng được vào bảng.
+    ratings = dict(Profile.objects.filter(is_unlisted=False, rating__isnull=False)
+                   .values_list('id', 'rating'))
+
     now = timezone.now()
+    rows = []
+    for user_id in set(points) | set(ratings):
+        pts, solved = points.get(user_id, [0.0, 0])
+        pts = round(pts, 2)
+        rating = ratings.get(user_id)                 # None nếu chưa rated
+        total = round(pts + (rating or 0), 2)
+        rows.append(UserScore(profile_id=user_id, points=pts, rating=rating,
+                              total=total, solved=solved, updated=now))
+
     with transaction.atomic():
-        # Tính lại từ đầu cho sạch: xoá hết rồi ghi lại. Bảng nhỏ (cỡ số người
-        # dùng) nên rẻ; tránh phải lần vết ai vừa mất/thêm điểm.
+        # Tính lại từ đầu cho sạch: xoá hết rồi ghi lại. Bảng nhỏ (cỡ số người dùng).
         UserScore.objects.all().delete()
-        UserScore.objects.bulk_create([
-            UserScore(profile_id=user_id, points=round(total, 2), solved=count, updated=now)
-            for user_id, (total, count) in totals.items()
-        ])
-    return len(totals)
+        UserScore.objects.bulk_create(rows)
+    return len(rows)
