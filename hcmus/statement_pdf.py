@@ -429,6 +429,18 @@ MASTER = r"""\documentclass[12pt,a4paper,oneside]{article}
 \usepackage{booktabs}
 \usepackage{array}
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+%% Không nạp hyperref, nhưng pandoc luôn sinh mấy lệnh của hyperref cho heading
+%% (# trong đề, hay gặp ở bài import từ Polygon). Không định nghĩa thì pdflatex ở
+%% nonstopmode coi là lệnh lạ rồi IN NGUYÊN các tham số ra chữ -> lòi slug
+%% "implementation-details" và lặp tiêu đề "Implementation DetailsImplementation
+%% Details". Định nghĩa để chỉ in phần cần in (giống \tightlist ở trên).
+\providecommand{\hypertarget}[2]{#2}      %% bỏ id neo, giữ nội dung
+\providecommand{\texorpdfstring}[2]{#1}   %% dùng bản in được, bỏ bản cho bookmark
+\providecommand{\href}[2]{#2}             %% không có link -> in chữ hiển thị
+\providecommand{\hyperlink}[2]{#2}
+%% Heading do pandoc sinh (# trong đề) để KHÔNG đánh số cho gọn và đồng bộ với các
+%% mục Input/Output vốn không đánh số.
+\setcounter{secnumdepth}{0}
 
 \contest{%(contest)s}{}{}
 
