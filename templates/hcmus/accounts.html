@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block media %}
+<style>
+    .ta-wrap { max-width: 860px; }
+    .ta-card { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+    .ta-card h3 { margin: 0 0 10px; font-size: .85em; text-transform: uppercase;
+                  letter-spacing: .04em; color: #888; font-weight: 600; }
+    .ta-wrap textarea { width: 100%; min-height: 150px; font-family: monospace; font-size: .95em;
+                        box-sizing: border-box; }
+    .ta-row { margin: 8px 0; }
+    .ta-row label { display: inline-block; min-width: 150px; color: #555; }
+    .ta-wrap input[type=text] { padding: 4px 6px; min-width: 260px; }
+    .ta-mode label { min-width: 0; margin-right: 20px; font-weight: 600; }
+    .ta-note { color: #777; font-size: .9em; margin: 4px 0 0; }
+    .ta-err { border-left: 4px solid #c0392b; background: #fdecea; padding: 10px 14px;
+              border-radius: 6px; margin-bottom: 14px; color: #a5281b; }
+    .ta-warn { border-left: 4px solid #d79a00; background: #fff8e6; padding: 10px 14px;
+               border-radius: 6px; margin-bottom: 14px; }
+    .ta-go { font-size: 1.05em; padding: 8px 22px; }
+    details.ta-adv summary { cursor: pointer; color: #12488f; font-weight: 600; margin-bottom: 8px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="ta-wrap">
+
+    <div class="ta-warn">
+        Đổi mật khẩu <b>không làm thay đổi bảng xếp hạng</b> (điểm/rating/scoreboard bám vào
+        tài khoản, không phải mật khẩu). Nhưng tài khoản nào đang đăng nhập sẽ bị <b>đăng xuất</b>,
+        phải đăng nhập lại bằng mật khẩu mới — nên làm lúc <b>không có kỳ thi đang diễn ra</b>.
+        Công cụ này <b>không bao giờ đụng tài khoản quản trị</b> (staff/superuser).
+    </div>
+
+    {% if error %}<div class="ta-err">{{ error }}</div>{% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="ta-card ta-mode">
+            <h3>Chế độ</h3>
+            {% if can_create %}
+            <label><input type="radio" name="mode" value="create" checked> Tạo tài khoản mới</label>
+            {% endif %}
+            {% if can_reset %}
+            <label><input type="radio" name="mode" value="reset" {% if not can_create %}checked{% endif %}>
+                Đổi mật khẩu (tài khoản đã có)</label>
+            {% endif %}
+            <p class="ta-note">
+                <b>Tạo mới:</b> username đã có thì bỏ qua; đặt luôn tên/tổ chức/email.
+                <b>Đổi mật khẩu:</b> chỉ đổi mật khẩu tài khoản đã có, giữ nguyên mọi thứ khác;
+                username chưa tồn tại thì bỏ qua.
+            </p>
+        </div>
+
+        <div class="ta-card">
+            <h3>Danh sách</h3>
+            <p class="ta-note">Mỗi dòng một tài khoản, các cột ngăn bằng dấu phẩy theo thứ tự
+                <code>username,password,name,school,email</code> (có dòng header cũng được).
+                Bỏ trống <code>password</code> thì hệ thống tự sinh (9 chữ số, không có 0/1).
+                Đổi mật khẩu hàng loạt thì chỉ cần cột <code>username</code>.</p>
+            <textarea name="text" placeholder="team01,,HCMUS-StarterTrio,HCMUS&#10;team02&#10;team03"></textarea>
+            <div class="ta-row" style="margin-top:10px">
+                <label>… hoặc tải file CSV/TXT</label>
+                <input type="file" name="file" accept=".csv,.txt,text/csv,text/plain">
+                <span class="ta-note">(tối đa 512 KB; nếu có file thì dùng file thay ô trên)</span>
+            </div>
+        </div>
+
+        <details class="ta-card ta-adv">
+            <summary>Tuỳ chọn thêm</summary>
+            <div class="ta-row">
+                <label>Thêm vào tổ chức (slug)</label>
+                <input type="text" name="org" placeholder="vd: icpc2026">
+                <span class="ta-note">chỉ áp dụng khi tạo mới</span>
+            </div>
+            <div class="ta-row">
+                <label>Tên hiển thị = cột name</label>
+                <input type="checkbox" name="display_name" value="1">
+                <span class="ta-note">hiện tên đội/họ tên thay username trên bảng xếp hạng (tạo mới)</span>
+            </div>
+            <div class="ta-row">
+                <label>Email domain</label>
+                <input type="text" name="email_domain" placeholder="student.hcmus.edu.vn">
+                <span class="ta-note">email trống thì suy ra &lt;username&gt;@domain (tạo mới)</span>
+            </div>
+        </details>
+
+        <div class="ta-card">
+            <h3>Phiếu đăng nhập (PDF)</h3>
+            <div class="ta-row"><label>Tiêu đề</label>
+                <input type="text" name="slip_title" placeholder="FIT-HCMUS Online Judge"></div>
+            <div class="ta-row"><label>Dòng phụ (kỳ thi)</label>
+                <input type="text" name="slip_contest" placeholder="2026 Training Camp #01"></div>
+            <div class="ta-row"><label>Địa chỉ đăng nhập</label>
+                <input type="text" name="slip_url" value="{{ default_url }}"></div>
+        </div>
+
+        <button type="submit" class="button ta-go">Chạy &amp; tải về (CSV + PDF phiếu)</button>
+        <p class="ta-note">Bấm xong hệ thống chạy trên server rồi trả về một file ZIP gồm
+            <code>tai-khoan.csv</code> (kèm mật khẩu mới + trạng thái từng dòng) và
+            <code>phieu-dang-nhap.pdf</code> (2 cột × 4 phiếu/trang A4, có viền cắt).</p>
+    </form>
+</div>
+{% endblock %}

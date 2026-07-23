@@ -44,5 +44,7 @@ django-admin-sortable2
 icalendar
 # Kiểm tra MX/A lúc đăng ký để chặn email không gửi tới được (judge/views/register.py).
 dnspython
+# Sinh PDF phiếu đăng nhập trong trang cấp tài khoản hàng loạt (hcmus/slips.py).
+fpdf2
 # This is a celery dependency whose latest major version is breaking everything.
 importlib-metadata<5

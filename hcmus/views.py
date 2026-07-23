@@ -351,3 +351,98 @@ def calendar_page(request):
         'months': cal.months_grids(request.user, 12),
         'ical_url': request.build_absolute_uri(reverse('hcmus_calendar_ical')),
     })
+
+
+# ---------------------------------------------------------------------------
+# Cấp / đổi mật khẩu tài khoản hàng loạt qua web. Gói lõi ở hcmus/accounts.py
+# (tạo/đổi) và hcmus/slips.py (PDF). Xem docs/06 §2.7.
+# ---------------------------------------------------------------------------
+
+def _may_manage_accounts(user):
+    return user.is_active and (user.has_perm('auth.add_user') or user.has_perm('auth.change_user'))
+
+
+def accounts_page(request):
+    """Trang quản trị: dán CSV/text hoặc tải file, chọn tạo-mới / đổi-mật-khẩu,
+    bấm một nút -> chạy trên server -> trả về file ZIP gồm CSV mật khẩu + PDF phiếu.
+
+    Gác quyền: auth.add_user (tạo) / auth.change_user (đổi mật khẩu). Lõi ở
+    accounts.run_batch còn chặn cứng không đụng tài khoản quản trị."""
+    if not _may_manage_accounts(request.user):
+        raise PermissionDenied()
+
+    ctx = {
+        'title': _('Bulk accounts'),
+        'can_create': request.user.has_perm('auth.add_user'),
+        'can_reset': request.user.has_perm('auth.change_user'),
+        'default_url': request.build_absolute_uri('/').rstrip('/'),
+    }
+
+    if request.method != 'POST':
+        return render(request, 'hcmus/accounts.html', ctx)
+
+    import io
+    import zipfile
+
+    from hcmus import accounts as acc
+    from hcmus import slips
+
+    mode = request.POST.get('mode', 'create')
+    if mode not in ('create', 'reset'):
+        mode = 'create'
+    need = 'auth.add_user' if mode == 'create' else 'auth.change_user'
+    if not request.user.has_perm(need):
+        raise PermissionDenied()
+
+    # Nguồn dữ liệu: ưu tiên file tải lên, không thì ô dán text.
+    text = ''
+    upload = request.FILES.get('file')
+    if upload is not None:
+        if upload.size > 512 * 1024:
+            ctx['error'] = _('Tệp lớn hơn 512 KB.')
+            return render(request, 'hcmus/accounts.html', ctx)
+        raw = upload.read()
+        try:
+            text = raw.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text = raw.decode('latin-1')
+    else:
+        text = request.POST.get('text', '')
+
+    if not text.strip():
+        ctx['error'] = _('Chưa có dữ liệu: dán danh sách vào ô hoặc tải file lên.')
+        return render(request, 'hcmus/accounts.html', ctx)
+
+    results = acc.run_batch(
+        text, mode,
+        org_slug=request.POST.get('org', '').strip(),
+        display_name=bool(request.POST.get('display_name')),
+        email_domain=request.POST.get('email_domain', '').strip(),
+    )
+    if not results:
+        ctx['error'] = _('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
+        return render(request, 'hcmus/accounts.html', ctx)
+
+    csv_text = acc.results_csv(results)
+    try:
+        pdf_bytes = slips.make_slips_pdf(
+            results,
+            title=request.POST.get('slip_title', '').strip() or 'FIT-HCMUS Online Judge',
+            contest=request.POST.get('slip_contest', '').strip(),
+            url=request.POST.get('slip_url', '').strip() or ctx['default_url'],
+        )
+    except Exception as e:  # noqa: BLE001  thiếu font/thư viện thì vẫn trả CSV
+        pdf_bytes = None
+        csv_text += f'\n# Không tạo được PDF phiếu: {e}\n'
+
+    changed = sum(1 for r in results if r['password'])
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('tai-khoan.csv', csv_text.encode('utf-8'))
+        if pdf_bytes:
+            z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
+    buf.seek(0)
+    resp = HttpResponse(buf.getvalue(), content_type='application/zip')
+    fname = f'{"tao-moi" if mode == "create" else "doi-matkhau"}-{changed}-tk.zip'
+    resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return resp

@@ -21,4 +21,5 @@ urlpatterns = [
          RedirectView.as_view(pattern_name='hcmus_ranking_detail', permanent=True)),
     path('lich/', views.calendar_page, name='hcmus_calendar'),
     path('lich/cong-khai.ics', views.calendar_ical, name='hcmus_calendar_ical'),
+    path('tai-khoan/', views.accounts_page, name='hcmus_accounts'),
 ]
