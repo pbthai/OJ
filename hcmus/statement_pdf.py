@@ -352,9 +352,97 @@ def _fmt_mem(kb):
     return ('%g' % mb) + 'MB' if mb < 1024 else ('%g' % (mb / 1024.0)) + 'GB'
 
 
+# --------------------------------------------------------------------------
+# Ảnh trong đề. Importer Polygon upload ảnh vào martor rồi để lại <img
+# src="/martor/..."> (ảnh có width/căn giữa) hoặc ![image](/martor/...). Cả hai
+# đều KHÔNG lên PDF: preprocess_markdown xoá sạch thẻ HTML, còn ![](url) thì pandoc
+# ra \includegraphics{url} mà pdflatex không tải URL được. Ở đây: copy file ảnh nội
+# bộ vào workdir rồi thay bằng token chữ, sau pandoc mới ráp lại \includegraphics.
+# --------------------------------------------------------------------------
+
+_IMG_TAG = re.compile(r'<\s*img[^>]*>', re.I)
+_MD_IMG = re.compile(r'!\[[^\]]*\]\(\s*([^)\s]+)[^)]*\)')
+
+
+def _img_local_path(url):
+    """URL ảnh nội bộ -> đường dẫn file trên đĩa, hoặc None. Chỉ nhận martor/media;
+    ảnh URL ngoài thì bỏ (pdflatex không tải mạng, và không nên tải theo đề)."""
+    from django.conf import settings
+    url = url.split('?', 1)[0].split('#', 1)[0]
+    mart = (getattr(settings, 'MARTOR_UPLOAD_URL_PREFIX', '/martor') or '/martor').rstrip('/')
+    mart_dir = os.path.join(settings.MEDIA_ROOT,
+                            getattr(settings, 'MARTOR_UPLOAD_MEDIA_DIR', 'martor'))
+    media = (settings.MEDIA_URL or '/media/').rstrip('/')
+    for prefix, root in ((mart, mart_dir), (media, settings.MEDIA_ROOT)):
+        if prefix and url.startswith(prefix + '/'):
+            path = os.path.normpath(os.path.join(root, url[len(prefix) + 1:]))
+            if path.startswith(os.path.normpath(root) + os.sep) and os.path.isfile(path):
+                return path
+    return None
+
+
+def _img_width_opt(spec):
+    """spec lấy từ thẻ ('9cm', '80%', '300'...) -> option của \\includegraphics.
+    Không rõ đơn vị thì dùng mặc định vừa phải để ảnh không tràn trang."""
+    if spec:
+        m = re.match(r'\s*([0-9.]+)\s*(cm|mm|pt|%)?\s*$', spec)
+        if m:
+            val, unit = float(m.group(1)), (m.group(2) or '')
+            if unit in ('cm', 'mm', 'pt'):
+                if unit == 'cm':
+                    val = min(val, 16.0)          # chặn tràn ngang trang A4
+                return '[width=%g%s]' % (val, unit)
+            if unit == '%':
+                return '[width=%g\\linewidth]' % min(val / 100.0, 1.0)
+    return '[width=0.7\\linewidth]'
+
+
+def _img_width(tag):
+    m = re.search(r'width\s*:\s*([0-9.]+\s*(?:cm|mm|pt|%)?)', tag, re.I)      # style="width:9cm"
+    if m:
+        return m.group(1)
+    m = re.search(r'\bwidth\s*=\s*["\']?\s*([0-9.]+\s*(?:cm|mm|pt|%)?)', tag, re.I)  # width="9cm"
+    return m.group(1) if m else None
+
+
+def extract_images(md, workdir, code):
+    """Thay ảnh trong markdown bằng token chữ + copy file vào workdir. Trả về
+    (markdown_mới, {token: latex}). Chạy TRƯỚC preprocess_markdown."""
+    images = {}
+    counter = [0]
+
+    def emit(url, width_spec):
+        if not url:
+            return ''
+        path = _img_local_path(url)
+        if not path:
+            return ''                        # ảnh ngoài / mất file -> bỏ, không làm vỡ đề
+        i = counter[0]
+        counter[0] += 1
+        ext = os.path.splitext(path)[1].lower() or '.png'
+        base = 'img-%s-%d%s' % (re.sub(r'[^a-z0-9]', '', code.lower()), i, ext)
+        dest = os.path.join(workdir, base)
+        if not os.path.exists(dest):
+            shutil.copy(path, dest)
+        token = 'HCMUSSTMTIMG%dEND' % i
+        images[token] = ('\n\\begin{center}\n\\includegraphics%s{%s}\n\\end{center}\n'
+                         % (_img_width_opt(width_spec), base))
+        return '\n\n%s\n\n' % token
+
+    def on_img_tag(m):
+        tag = m.group(0)
+        src = re.search(r'src\s*=\s*(["\'])(.*?)\1', tag, re.I)
+        return emit(src.group(2), _img_width(tag)) if src else ''
+
+    md = _IMG_TAG.sub(on_img_tag, md)
+    md = _MD_IMG.sub(lambda m: emit(m.group(1), None), md)
+    return md, images
+
+
 def problem_tex(item, workdir):
     """Sinh nội dung .tex cho một bài, đồng thời ghi file mẫu .in/.out ra workdir."""
-    sec = split_sections(preprocess_markdown(item['markdown']))
+    md, images = extract_images(item['markdown'], workdir, item['code'])
+    sec = split_sections(preprocess_markdown(md))
 
     parts = [
         '\\begin{problem}{%s}{stdin}{stdout}{%s}{%s}' % (
@@ -398,7 +486,11 @@ def problem_tex(item, workdir):
         parts += ['', '\\Notes', md_to_tex(sec['notes'])]
 
     parts += ['}', '\\end{problem}', '']
-    return '\n'.join(parts)
+    body = '\n'.join(parts)
+    # Ráp lại ảnh: token chữ (sống sót qua preprocess + pandoc) -> \includegraphics.
+    for token, tex in images.items():
+        body = body.replace(token, tex)
+    return body
 
 
 ORDINAL = {1: 'st', 2: 'nd', 3: 'rd'}
