@@ -17,9 +17,9 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from hcmus.models import (CalendarEvent, HomeSection, JudgeSwitch, PermSet, Printer,
-                          PrintRequest, Ranking, RankingContest, SidebarSection, TeamRoom,
-                          UserScore)
+from hcmus.models import (CalendarEvent, ContestPrinter, HomeSection, JudgeSwitch, PermSet,
+                          Printer, PrintRequest, Ranking, RankingContest, SidebarSection,
+                          TeamRoom, UserScore)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -635,3 +635,34 @@ class CalendarEventAdmin(admin.ModelAdmin):
         if not obj.created_by_id and getattr(request, 'profile', None) is not None:
             obj.created_by = request.profile
         super().save_model(request, obj, form, change)
+
+
+# ---------------------------------------------------------------------------
+# Máy in cho từng kỳ thi: gắn INLINE vào trang sửa contest sẵn có của vnoj mà
+# KHÔNG sửa file lõi — unregister Contest rồi register lại lớp con thêm inline.
+# Import ContestAdmin cũng ép judge.admin nạp (đăng ký Contest) trước, nên thứ tự
+# nạp app không quan trọng.
+# ---------------------------------------------------------------------------
+
+class ContestPrinterInline(admin.StackedInline):
+    model = ContestPrinter
+    fk_name = 'contest'
+    max_num = 1
+    extra = 1
+    fields = ('printer',)
+    verbose_name = _('In bài trong giờ thi')
+    verbose_name_plural = _('In bài trong giờ thi (chọn máy in = cho phép; để trống = không cho in)')
+
+
+try:
+    from judge.admin import ContestAdmin as _BaseContestAdmin
+    from judge.models import Contest as _JudgeContest
+
+    class ContestAdmin(_BaseContestAdmin):
+        inlines = list(_BaseContestAdmin.inlines) + [ContestPrinterInline]
+
+    admin.site.unregister(_JudgeContest)
+    admin.site.register(_JudgeContest, ContestAdmin)
+except Exception:   # noqa: BLE001  hỏng chỗ này không được làm sập admin; Contest giữ admin gốc
+    import logging
+    logging.getLogger('hcmus').exception('Không gắn được ContestPrinterInline vào ContestAdmin')

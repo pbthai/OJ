@@ -506,7 +506,7 @@ def print_submission(request, submission):
     from judge.models import Submission
 
     from hcmus import printing
-    from hcmus.models import Printer, PrintRequest, TeamRoom
+    from hcmus.models import ContestPrinter, PrintRequest, TeamRoom
 
     if not request.user.is_authenticated:
         raise PermissionDenied()
@@ -542,10 +542,10 @@ def print_submission(request, submission):
         return result(False, _('Bài in dài %(p)d trang, vượt trần %(l)d trang nên KHÔNG in. '
                                'Hãy in gọn lại (bỏ phần thừa).') % {'p': pages, 'l': limit})
 
-    printer = Printer.active()
+    # Máy in do TỪNG kỳ thi chọn (admin → sửa contest). Không chọn = kỳ đó không in.
+    printer = ContestPrinter.printer_for(cp.contest_id)
     if printer is None:
-        PrintRequest.objects.create(status=PrintRequest.FAILED, error='no active printer', **common)
-        return result(False, _('Hệ thống chưa cấu hình máy in. Báo giám thị.'))
+        return result(False, _('Kỳ thi này chưa bật in bài (giám thị chưa chọn máy in).'))
 
     pr = PrintRequest.objects.create(status=PrintRequest.QUEUED, printer=printer.name, **common)
     ok, msg = printing.send_to_printer(pdf, printer.cups_dest, job_name=f'{team}-{sub.problem.code}')

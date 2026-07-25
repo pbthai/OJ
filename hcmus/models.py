@@ -446,6 +446,31 @@ class PrintRequest(models.Model):
         return f'{self.team or self.profile} — {self.problem} ({self.get_status_display()})'
 
 
+class ContestPrinter(models.Model):
+    """Máy in cho một kỳ thi. CÓ chọn máy in = cho phép in bài trong kỳ đó (in tới
+    máy này); để trống (hoặc không có bản ghi) = KHÔNG cho phép in. Cấu hình ngay
+    trong trang sửa contest (inline), nên bật/tắt in là chuyện của từng kỳ thi."""
+    contest = models.OneToOneField(Contest, on_delete=models.CASCADE,
+                                   related_name='hcmus_printer', verbose_name=_('contest'))
+    printer = models.ForeignKey(Printer, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+', verbose_name=_('printer'),
+                                help_text=_('Chọn máy in để CHO PHÉP thí sinh in bài trong kỳ thi '
+                                            'này. Để trống = không cho phép in.'))
+
+    class Meta:
+        verbose_name = _('contest printing')
+        verbose_name_plural = _('contest printing')
+
+    def __str__(self):
+        return f'{self.contest.key}: {self.printer or "—"}'
+
+    @classmethod
+    def printer_for(cls, contest_id):
+        """Máy in đã chọn cho contest (Printer) hoặc None nếu kỳ đó không bật in."""
+        cfg = cls.objects.filter(contest_id=contest_id).select_related('printer').first()
+        return cfg.printer if cfg else None
+
+
 class PermSet(models.Model):
     """Tập quyền, lồng nhau được — đại số tập hợp cho phân quyền.
 
