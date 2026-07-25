@@ -22,4 +22,5 @@ urlpatterns = [
     path('lich/', views.calendar_page, name='hcmus_calendar'),
     path('lich/cong-khai.ics', views.calendar_ical, name='hcmus_calendar_ical'),
     path('tai-khoan/', views.accounts_page, name='hcmus_accounts'),
+    path('in-bai/<int:submission>/', views.print_submission, name='hcmus_print_submission'),
 ]

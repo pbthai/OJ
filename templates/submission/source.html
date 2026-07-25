@@ -68,6 +68,20 @@
     {% if (request.user == submission.user.user or perms.judge.resubmit_other) and not submission.language.file_only %}
         <div><a href="{{ url('problem_submit', submission.problem.code, submission.id) }}">{{ _('Resubmit') }}</a></div>
     {% endif %}
+    {# FIT-HCMUS: in bài trong giờ thi (ICPC). Chỉ chủ nhân bài, và đúng contest
+       đang dự. Kiểm tra chặt (trần trang, máy in...) nằm ở view. #}
+    {% if request.user.is_authenticated and request.user == submission.user.user
+          and submission.contest_object_id
+          and request.user.profile.current_contest
+          and request.user.profile.current_contest.contest_id == submission.contest_object_id
+          and not request.user.profile.current_contest.ended %}
+        <div>
+            <form action="{{ url('hcmus_print_submission', submission.id) }}" method="post">
+                {% csrf_token %}
+                <a href="#" onclick="parentNode.submit()">{{ _('In bài') }} 🖶</a>
+            </form>
+        </div>
+    {% endif %}
     {% set can_edit = submission.problem.is_editable_by(request.user) %}
     {% if perms.judge.rejudge_submission and can_edit and not submission.is_locked %}
         <div>

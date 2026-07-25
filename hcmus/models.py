@@ -359,6 +359,93 @@ class SidebarSection(models.Model):
         return ordered
 
 
+class TeamRoom(models.Model):
+    """Phòng thi / chỗ ngồi của một tài khoản, để in lên header phiếu in bài trong
+    giờ thi (runner biết mang tới bàn nào). Nạp từ cột `room` của công cụ cấp tài
+    khoản hàng loạt; không có thì để trống (header chỉ có tên đội)."""
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE,
+                                   related_name='team_room', verbose_name=_('user'))
+    room = models.CharField(max_length=60, blank=True, verbose_name=_('room'))
+    updated = models.DateTimeField(auto_now=True, verbose_name=_('last updated'))
+
+    class Meta:
+        verbose_name = _('team room')
+        verbose_name_plural = _('team rooms')
+
+    def __str__(self):
+        return f'{self.profile}: {self.room or "—"}'
+
+    @classmethod
+    def room_of(cls, profile_id):
+        return dict(cls.objects.filter(profile_id=profile_id).values_list('profile_id', 'room')).get(profile_id, '')
+
+
+class Printer(models.Model):
+    """Máy in để server gửi bài in tới qua CUPS. Cài & chọn ngay trong admin web.
+
+    `cups_dest` là tên hàng đợi CUPS trên server (xem `lpstat -e`) hoặc URI kiểu
+    `ipp://<ip>/ipp/print` / `socket://<ip>:9100`. Server phải TỚI ĐƯỢC máy in này
+    qua mạng thì mới in được — dùng nút "In thử" để kiểm tra.
+    """
+    name = models.CharField(max_length=60, verbose_name=_('name'))
+    cups_dest = models.CharField(max_length=120, verbose_name=_('CUPS destination'),
+                                 help_text=_('Tên hàng đợi CUPS (lpstat -e) hoặc URI ipp://.../socket://ip:9100'))
+    is_active = models.BooleanField(default=False, verbose_name=_('active'),
+                                    help_text=_('Máy in đang dùng để in bài. Chỉ một cái nên bật.'))
+    note = models.CharField(max_length=200, blank=True, verbose_name=_('note'))
+
+    class Meta:
+        verbose_name = _('printer')
+        verbose_name_plural = _('printers')
+
+    def __str__(self):
+        return f'{self.name} ({self.cups_dest})'
+
+    @classmethod
+    def active(cls):
+        return cls.objects.filter(is_active=True).first()
+
+
+class PrintRequest(models.Model):
+    """Một yêu cầu in bài của thí sinh trong giờ thi — vừa là hàng đợi vừa là log.
+
+    Theo luật ICPC: chỉ in mã nguồn bài NỘP của chính thí sinh, trần 10 trang (quá
+    thì từ chối ngay), in thẳng không cần giám thị duyệt. Snapshot tên đội/phòng/
+    ngôn ngữ để log còn đọc được kể cả khi submission bị xoá.
+    """
+    QUEUED = 'Q'
+    PRINTED = 'P'
+    FAILED = 'F'
+    REJECTED = 'R'
+    STATUS = ((QUEUED, _('Queued')), (PRINTED, _('Printed')),
+              (FAILED, _('Failed')), (REJECTED, _('Rejected — over page limit')))
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='print_requests',
+                                verbose_name=_('user'))
+    submission = models.ForeignKey('judge.Submission', on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name=_('submission'))
+    contest = models.ForeignKey(Contest, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+', verbose_name=_('contest'))
+    team = models.CharField(max_length=100, blank=True, verbose_name=_('team'))
+    room = models.CharField(max_length=60, blank=True, verbose_name=_('room'))
+    problem = models.CharField(max_length=100, blank=True, verbose_name=_('problem'))
+    language = models.CharField(max_length=40, blank=True, verbose_name=_('language'))
+    pages = models.PositiveIntegerField(default=0, verbose_name=_('pages'))
+    status = models.CharField(max_length=1, choices=STATUS, default=QUEUED, verbose_name=_('status'))
+    printer = models.CharField(max_length=60, blank=True, verbose_name=_('printer'))
+    error = models.CharField(max_length=300, blank=True, verbose_name=_('error'))
+    created = models.DateTimeField(auto_now_add=True, verbose_name=_('created'))
+
+    class Meta:
+        verbose_name = _('print request')
+        verbose_name_plural = _('print requests')
+        ordering = ['-created']
+        permissions = (('view_print_queue', _('View the in-contest print queue')),)
+
+    def __str__(self):
+        return f'{self.team or self.profile} — {self.problem} ({self.get_status_display()})'
+
+
 class PermSet(models.Model):
     """Tập quyền, lồng nhau được — đại số tập hợp cho phân quyền.
 

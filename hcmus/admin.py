@@ -17,8 +17,9 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from hcmus.models import (CalendarEvent, HomeSection, JudgeSwitch, PermSet, Ranking,
-                          RankingContest, SidebarSection, UserScore)
+from hcmus.models import (CalendarEvent, HomeSection, JudgeSwitch, PermSet, Printer,
+                          PrintRequest, Ranking, RankingContest, SidebarSection, TeamRoom,
+                          UserScore)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -530,6 +531,54 @@ class UserScoreAdmin(admin.ModelAdmin):
             reverse('admin:hcmus_userscore_recompute'),
             _('Recompute now')), messages.INFO)
         return super().changelist_view(request, extra_context)
+
+
+@admin.register(Printer)
+class PrinterAdmin(admin.ModelAdmin):
+    """Cấu hình + chọn máy in để in bài trong giờ thi. `cups_dest` là tên hàng đợi
+    CUPS trên server (tạo một lần bằng `lpadmin`, xem docs/06 §2.8). Nút 'In thử'
+    để kiểm tra server có tới được máy in không."""
+    list_display = ('name', 'cups_dest', 'is_active', 'note')
+    list_editable = ('is_active',)
+    actions = ['test_print']
+
+    @admin.action(description=_('In thử một trang tới máy in đã chọn'))
+    def test_print(self, request, queryset):
+        from hcmus import printing
+        sample = ('# FIT-HCMUS Online Judge — in thử\n'
+                  'print("Xin chào — kiểm tra máy in và tiếng Việt: ăâđêôơư")\n')
+        for p in queryset:
+            pdf, _pages = printing.render_source_pdf(
+                sample, 'Python', 'python', 'IN THỬ', 'P.TEST', 'Test')
+            ok, msg = printing.send_to_printer(pdf, p.cups_dest, 'test-print')
+            self.message_user(request, f'{p.name}: {"OK" if ok else "LỖI"} — {msg}',
+                              messages.SUCCESS if ok else messages.ERROR)
+
+
+@admin.register(PrintRequest)
+class PrintRequestAdmin(admin.ModelAdmin):
+    """Hàng đợi + log in bài (CHỈ XEM). In tự động nên đây để giám thị theo dõi và
+    soát; muốn in lại thì thí sinh tự bấm 'In bài' lần nữa."""
+    list_display = ('created', 'team', 'room', 'problem', 'language', 'pages', 'status',
+                    'printer', 'error')
+    list_filter = ('status', 'contest')
+    search_fields = ('team', 'room', 'problem')
+    date_hierarchy = 'created'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(TeamRoom)
+class TeamRoomAdmin(admin.ModelAdmin):
+    """Phòng thi của từng đội (in lên header phiếu in). Thường nạp tự động từ cột
+    room của công cụ cấp tài khoản; sửa tay ở đây khi cần."""
+    list_display = ('profile', 'room', 'updated')
+    search_fields = ('profile__user__username', 'room')
+    raw_id_fields = ('profile',)
 
 
 @admin.register(JudgeSwitch)

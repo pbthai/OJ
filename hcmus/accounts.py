@@ -153,6 +153,12 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
                     user.save(update_fields=['password'])
                     status = 'đổi mật khẩu'
 
+                # Lưu phòng thi để tính năng in bài in lên header phiếu. Chỉ lưu khi
+                # có nhập room; không nhập thì giữ nguyên (không xoá room cũ).
+                if room:
+                    from hcmus.models import TeamRoom
+                    TeamRoom.objects.update_or_create(profile=user.profile,
+                                                      defaults={'room': room})
                 results.append({'username': username, 'password': password, 'name': name,
                                 'school': school, 'email': email, 'room': room, 'status': status})
         except Exception as e:  # noqa: BLE001  một dòng hỏng không được làm sập cả mẻ

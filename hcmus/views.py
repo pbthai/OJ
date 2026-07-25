@@ -493,3 +493,66 @@ def accounts_page(request):
     prefix = {'create': 'tao-moi', 'reset': 'doi-matkhau', 'slips': 'phieu'}[mode]
     resp['Content-Disposition'] = f'attachment; filename="{prefix}-{changed}-tk.zip"'
     return resp
+
+
+# ---------------------------------------------------------------------------
+# In mã nguồn bài nộp cho thí sinh trong giờ thi (luật ICPC). Chỉ in submission
+# của chính mình, thuộc contest ĐANG diễn ra; chặn >10 trang (từ chối ngay);
+# in thẳng máy in đang chọn, không cần giám thị duyệt. Xem docs/06 §2.8.
+# ---------------------------------------------------------------------------
+
+@require_POST
+def print_submission(request, submission):
+    from judge.models import Submission
+
+    from hcmus import printing
+    from hcmus.models import Printer, PrintRequest, TeamRoom
+
+    if not request.user.is_authenticated:
+        raise PermissionDenied()
+    sub = get_object_or_404(
+        Submission.objects.select_related('user__user', 'problem', 'language', 'source'),
+        id=submission)
+    profile = request.user.profile
+
+    def result(ok, message):
+        return render(request, 'hcmus/print-result.html',
+                      {'title': _('In bài'), 'ok': ok, 'message': message, 'submission': sub})
+
+    # Chỉ chủ nhân bài, và phải là bài của contest đang diễn ra mà họ đang dự.
+    if sub.user_id != profile.id:
+        raise PermissionDenied()
+    cp = profile.current_contest
+    if cp is None or cp.ended or sub.contest_object_id != cp.contest_id:
+        return result(False, _('Chỉ in được bài bạn đã nộp trong kỳ thi đang diễn ra.'))
+
+    team = profile.display_name
+    room = TeamRoom.room_of(profile.id)
+    try:
+        pdf, pages = printing.render_submission_pdf(sub, team, room)
+    except Exception as e:  # noqa: BLE001
+        return result(False, _('Không dựng được bản in: %s. Báo giám thị.') % e)
+
+    limit = getattr(settings, 'HCMUS_PRINT_PAGE_LIMIT', printing.PAGE_LIMIT_DEFAULT)
+    common = dict(profile=profile, submission=sub, contest_id=cp.contest_id, team=team, room=room,
+                  problem=sub.problem.name[:100], language=sub.language.name[:40], pages=pages)
+
+    if pages > limit:
+        PrintRequest.objects.create(status=PrintRequest.REJECTED, **common)
+        return result(False, _('Bài in dài %(p)d trang, vượt trần %(l)d trang nên KHÔNG in. '
+                               'Hãy in gọn lại (bỏ phần thừa).') % {'p': pages, 'l': limit})
+
+    printer = Printer.active()
+    if printer is None:
+        PrintRequest.objects.create(status=PrintRequest.FAILED, error='no active printer', **common)
+        return result(False, _('Hệ thống chưa cấu hình máy in. Báo giám thị.'))
+
+    pr = PrintRequest.objects.create(status=PrintRequest.QUEUED, printer=printer.name, **common)
+    ok, msg = printing.send_to_printer(pdf, printer.cups_dest, job_name=f'{team}-{sub.problem.code}')
+    pr.status = PrintRequest.PRINTED if ok else PrintRequest.FAILED
+    pr.error = '' if ok else msg
+    pr.save(update_fields=['status', 'error'])
+    if ok:
+        return result(True, _('Đã gửi bài đến máy in (%(p)d trang). Giám thị sẽ mang bản in tới bàn của bạn.')
+                      % {'p': pages})
+    return result(False, _('Gửi máy in lỗi: %s. Báo giám thị.') % msg)
