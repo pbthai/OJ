@@ -72,6 +72,27 @@
             </div>
         </div>
 
+        <div class="ta-card">
+            <h3>Cấp quyền vào contest (tuỳ chọn)</h3>
+            <p class="ta-note">Tích contest để thêm các user trong danh sách vào
+                <b>danh sách được phép vào</b> (private_contestants) của contest riêng tư.
+                Chỉ cấp quyền vào, <b>không tạo lượt thi, không đụng scoreboard</b>; đội tự
+                bấm “Vào thi” khi contest mở. Áp dụng cho cả ba chế độ.</p>
+            {% if contests %}
+                {% for c in contests %}
+                <div class="ta-row">
+                    <label style="min-width:0">
+                        <input type="checkbox" name="contests" value="{{ c.key }}">
+                        {{ c.name }}
+                        <span class="ta-note">— {{ c.status }}{% if not c.is_private %}, KHÔNG riêng-tư-cá-nhân (cấp quyền vô tác dụng){% endif %}</span>
+                    </label>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="ta-note">Không có contest nào sắp mở / đang chạy / vừa xong.</p>
+            {% endif %}
+        </div>
+
         <details class="ta-card ta-adv">
             <summary>Tuỳ chọn thêm</summary>
             <div class="ta-row">

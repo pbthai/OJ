@@ -362,6 +362,26 @@ def _may_manage_accounts(user):
     return user.is_active and (user.has_perm('auth.add_user') or user.has_perm('auth.change_user'))
 
 
+def _eligible_contests(user):
+    """Contest để tích chọn cấp quyền vào: sắp mở / đang chạy / vừa xong, và người
+    dùng có quyền sửa. Trả về list dict cho template."""
+    import datetime
+
+    from judge.models import Contest
+    now = timezone.now()
+    qs = (Contest.objects.filter(end_time__gte=now - datetime.timedelta(days=14),
+                                 start_time__lte=now + datetime.timedelta(days=30))
+          .order_by('start_time'))
+    out = []
+    for c in qs:
+        if not (user.is_superuser or c.is_editable_by(user)):
+            continue
+        status = 'sắp mở' if now < c.start_time else ('đang chạy' if now <= c.end_time else 'vừa xong')
+        out.append({'key': c.key, 'name': c.name, 'start': c.start_time,
+                    'is_private': c.is_private, 'status': status})
+    return out
+
+
 def accounts_page(request):
     """Trang quản trị: dán CSV/text hoặc tải file, chọn tạo-mới / đổi-mật-khẩu,
     bấm một nút -> chạy trên server -> trả về file ZIP gồm CSV mật khẩu + PDF phiếu.
@@ -376,6 +396,7 @@ def accounts_page(request):
         'can_create': request.user.has_perm('auth.add_user'),
         'can_reset': request.user.has_perm('auth.change_user'),
         'default_url': request.build_absolute_uri('/').rstrip('/'),
+        'contests': _eligible_contests(request.user),
     }
 
     if request.method != 'POST':
@@ -432,6 +453,21 @@ def accounts_page(request):
         ctx['error'] = _('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
         return render(request, 'hcmus/accounts.html', ctx)
 
+    # Cấp quyền vào contest được tích (private_contestants) — mọi chế độ đều có.
+    # Chỉ thêm quyền vào, KHÔNG tạo lượt thi, KHÔNG đụng scoreboard.
+    contest_note = ''
+    contest_keys = request.POST.getlist('contests')
+    if contest_keys:
+        from judge.models import Contest
+        contests = [c for c in Contest.objects.filter(key__in=contest_keys)
+                    if request.user.is_superuser or c.is_editable_by(request.user)]
+        usernames = [r['username'] for r in results if r.get('username')]
+        added = acc.add_users_to_contests(usernames, contests)
+        lines = ['Cấp quyền vào contest (private_contestants, không tạo lượt thi):']
+        for contest, n, note in added:
+            lines.append(f'  {contest.key}: +{n} user' + (f'   [{note}]' if note else ''))
+        contest_note = '\n'.join(lines) + '\n'
+
     csv_text = acc.results_csv(results)
     try:
         pdf_bytes = slips.make_slips_pdf(
@@ -450,6 +486,8 @@ def accounts_page(request):
         z.writestr('tai-khoan.csv', csv_text.encode('utf-8'))
         if pdf_bytes:
             z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
+        if contest_note:
+            z.writestr('cap-quyen-contest.txt', contest_note.encode('utf-8'))
     buf.seek(0)
     resp = HttpResponse(buf.getvalue(), content_type='application/zip')
     prefix = {'create': 'tao-moi', 'reset': 'doi-matkhau', 'slips': 'phieu'}[mode]

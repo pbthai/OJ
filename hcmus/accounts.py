@@ -161,6 +161,26 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
     return results
 
 
+def add_users_to_contests(usernames, contests):
+    """Cấp quyền vào contest: thêm các user (theo username, chỉ user ĐÃ tồn tại) vào
+    private_contestants của từng contest. Idempotent (đã có thì bỏ qua).
+
+    KHÔNG tạo ContestParticipation, KHÔNG đụng scoreboard/submission, KHÔNG tự bật
+    is_private (giữ nguyên chế độ contest). Trả về list (contest, số_vừa_thêm, ghi_chú).
+    """
+    from judge.models import Profile
+    profiles = list(Profile.objects.filter(user__username__in=set(usernames)))
+    out = []
+    for contest in contests:
+        have = set(contest.private_contestants.values_list('id', flat=True))
+        to_add = [p for p in profiles if p.id not in have]
+        if to_add:
+            contest.private_contestants.add(*to_add)
+        note = '' if contest.is_private else 'contest KHÔNG riêng-tư-cá-nhân nên cấp quyền này vô tác dụng'
+        out.append((contest, len(to_add), note))
+    return out
+
+
 def results_csv(results):
     """Kết quả -> chuỗi CSV (utf-8-sig để Excel mở đúng tiếng Việt)."""
     buf = io.StringIO()
