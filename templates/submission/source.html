@@ -74,8 +74,7 @@
           and submission.contest_object_id
           and request.user.profile.current_contest
           and request.user.profile.current_contest.contest_id == submission.contest_object_id
-          and not request.user.profile.current_contest.ended
-          and hcmus_contest_printer(submission.contest_object) %}
+          and not request.user.profile.current_contest.ended %}
         <div>
             <form action="{{ url('hcmus_print_submission', submission.id) }}" method="post">
                 {% csrf_token %}
