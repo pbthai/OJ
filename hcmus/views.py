@@ -1,12 +1,13 @@
 """Tính năng tuỳ biến của FIT-HCMUS (xem docs/07-lo-trinh-tinh-nang.md §4).
 
 ICPC Resolver: diễn hoạt "mở băng" bảng xếp hạng sau contest.
-Dữ liệu lấy thẳng từ kết quả vnoj đã tính (frozen_* và final) nên thứ hạng
-luôn khớp bảng chính thức — không tự tính lại như các resolver bên ngoài.
+Phần FINAL luôn đọc sống từ format_data của vnoj nên khớp bảng chính thức, kể cả
+sau khi rejudge. Không tự tính lại thứ hạng như các resolver bên ngoài.
 
-QUAN TRỌNG: khi contest được mở băng (frozen_last_minutes=0) rồi recompute,
-vnoj GHI ĐÈ frozen_points/is_frozen -> mất trạng thái đóng băng. Vì vậy view
-này lưu snapshot JSON lần đầu chạy và ưu tiên dùng snapshot về sau.
+Trạng thái ĐÓNG BĂNG (pending + frozen_*) bị vnoj ghi đè khi contest mở băng
+(frozen_last_minutes=0) rồi recompute -> mất. Nên view lưu snapshot phần băng khi
+contest CÒN băng, và về sau chỉ phủ phần băng đó lên bảng sống (final vẫn sống).
+Nhờ vậy Resolver không bao giờ đông cứng phần final theo một lần rejudge nào.
 """
 import json
 import os
@@ -104,20 +105,56 @@ def _snapshot_path(key):
     return os.path.join(SNAPSHOT_DIR, f'{key}.json')
 
 
+def _save_snapshot(path, payload):
+    """Ghi snapshot nguyên tử (tránh hỏng file nếu bị ngắt giữa chừng)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f'{path}.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _overlay_frozen(live, snap):
+    """Nền là bảng SỐNG (final khớp bảng chính thức, phản ánh mọi rejudge); phủ lại
+    trạng thái băng (pending + frozen) từ snapshot đã lưu hồi contest còn đóng băng,
+    khớp theo (username, nhãn bài) nên không phụ thuộc thứ tự.
+    Đội bị loại (DQ) sau đó không có trong bảng sống -> tự động biến mất khỏi resolver."""
+    snap_team = {t['username']: t for t in snap['teams']}
+    snap_cell = {(t['username'], c['label']): c
+                 for t in snap['teams'] for c in t['cells']}
+    for t in live['teams']:
+        for c in t['cells']:
+            sc = snap_cell.get((t['username'], c['label']))
+            if sc is not None:
+                c['pending'] = sc['pending']
+                c['frozen'] = sc['frozen']
+        st = snap_team.get(t['username'])
+        if st is not None:
+            t['frozen'] = st['frozen']
+    return live
+
+
 def get_payload(contest, refresh=False):
-    """Ưu tiên snapshot (giữ được trạng thái băng kể cả sau khi đã mở băng)."""
+    """FINAL luôn lấy từ bảng sống để khớp bảng chính thức (kể cả sau rejudge);
+    snapshot chỉ dùng phục hồi trạng thái ĐÓNG BĂNG khi contest đã mở băng."""
+    live = build_payload(contest)
+    live_has_pending = any(c['pending'] for t in live['teams'] for c in t['cells'])
     path = _snapshot_path(contest.key)
+
+    if live_has_pending:
+        # Contest còn đóng băng: format_data sống đang giữ cả frozen lẫn final đúng.
+        # Cập nhật snapshot để trạng thái mở-băng sống sót khi sau này mở băng thật.
+        _save_snapshot(path, live)
+        return live
+
+    # Không còn ô băng nào: hoặc chưa từng băng, hoặc đã mở băng (frozen bị xoá).
+    # Phủ frozen từ snapshot nhưng GIỮ final sống -> khớp bảng chính thức.
     if not refresh and os.path.exists(path):
         with open(path, encoding='utf-8') as f:
-            return json.load(f)
-    payload = build_payload(contest)
-    # chỉ lưu snapshot khi còn dữ liệu băng (có ô pending) để không đè bằng bản đã mở
-    has_pending = any(c['pending'] for t in payload['teams'] for c in t['cells'])
-    if has_pending or refresh:
-        os.makedirs(SNAPSHOT_DIR, exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False)
-    return payload
+            snap = json.load(f)
+        return _overlay_frozen(live, snap)
+
+    return live
 
 
 @staff_only
