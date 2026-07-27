@@ -1434,7 +1434,7 @@ class CreateContest(PermissionRequiredMixin, TitleMixin, CreateView):
 
     def post(self, request, *args, **kwargs):
         self.object = None
-        form = ContestForm(request.POST or None)
+        form = ContestForm(request.POST or None, user=request.user)
         form_set = self.get_contest_problem_formset()
         if form.is_valid() and form_set.is_valid():
             with revisions.create_revision(atomic=True):

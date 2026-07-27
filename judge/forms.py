@@ -827,6 +827,20 @@ class ContestForm(ModelForm):
             str(self.fields['private_contestants'].help_text) + ' ' + \
             str(_('You can paste a list of usernames into this box.'))
 
+        # FIT-HCMUS: cho người phụ trách tự thêm tester/đồng quản trị (curator) ngay ở
+        # cài đặt contest. Nhưng CHỈ author gốc (hoặc superuser / người có edit_all_contest)
+        # mới được chỉnh hai danh sách này, để chặn chuỗi leo quyền (curator tự thêm
+        # curator khác, hoặc tự nâng mình). Người không đủ quyền: gỡ hẳn field khỏi form
+        # -> họ vẫn sửa được cài đặt contest, nhưng danh sách phụ trách giữ nguyên.
+        can_manage_staff = bool(self.user and self.user.is_authenticated) and (
+            self.user.is_superuser
+            or self.user.has_perm('judge.edit_all_contest')
+            or (self.instance.pk and self.user.profile.id in self.instance.author_ids)
+        )
+        if not can_manage_staff:
+            self.fields.pop('curators', None)
+            self.fields.pop('testers', None)
+
     def clean(self):
         cleaned_data = super().clean()
         start_time = cleaned_data.get('start_time')
@@ -867,6 +881,8 @@ class ContestForm(ModelForm):
             'access_code',
             'is_private',
             'private_contestants',
+            'curators',
+            'testers',
         ]
 
         widgets = {
@@ -876,6 +892,14 @@ class ContestForm(ModelForm):
             'scoreboard_visibility': Select2Widget(),
             'format_name': Select2Widget(),
             'private_contestants': HeavySelect2MultipleWidget(
+                data_view='profile_select2',
+                attrs={'style': 'width: 100%'},
+            ),
+            'curators': HeavySelect2MultipleWidget(
+                data_view='profile_select2',
+                attrs={'style': 'width: 100%'},
+            ),
+            'testers': HeavySelect2MultipleWidget(
                 data_view='profile_select2',
                 attrs={'style': 'width: 100%'},
             ),
