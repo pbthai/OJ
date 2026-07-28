@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{# Bảng tin tìm teammate (hcmus.TeammatePost). Mỗi tài khoản một mẩu, tự đăng,
+   tự sửa, tự đánh dấu đã khớp. Ai cũng đọc được; đăng nhập mới đăng được.
+   Chuỗi viết thẳng tiếng Việt như templates/hcmus/accounts.html, không qua _():
+   đây là trang riêng của FIT-HCMUS, không cần đa ngữ. #}
+{% block media %}
+    {% include "hcmus/teammate-styles.html" %}
+{% endblock %}
+
+{% block body %}
+    <p class="tm-intro">
+        Đăng một mẩu tin ngắn về mình để tìm đồng đội. Ghép được đội rồi thì đánh dấu
+        <b>đã khớp</b> để người khác biết mà không liên hệ nữa.
+    </p>
+
+    <div class="tm-toolbar">
+        <span class="tm-counts">
+            <b>{{ looking_count }}</b> người đang tìm &middot; {{ total_count }} mẩu tin
+        </span>
+        {% if only_looking %}
+            <a class="tm-filter" href="{{ url('hcmus_teammate') }}">Xem tất cả</a>
+        {% else %}
+            <a class="tm-filter" href="{{ url('hcmus_teammate') }}?loc=dang-tim">
+                Chỉ xem người đang tìm</a>
+        {% endif %}
+    </div>
+
+    {# ---------------- mẩu tin của tôi ---------------- #}
+    <div id="cua-toi" class="tm-mine">
+        {% if not request.user.is_authenticated %}
+            <p>
+                <a href="{{ url('auth_login') }}?next={{ url('hcmus_teammate') }}">Đăng nhập</a>
+                để đăng mẩu tin của bạn.
+            </p>
+        {% else %}
+            <h3>{% if mine %}Mẩu tin của tôi{% else %}Đăng mẩu tin của bạn{% endif %}</h3>
+
+            {% if mine %}
+                <div class="tm-mine-actions">
+                    <form method="post" action="{{ url('hcmus_teammate_status') }}">
+                        {% csrf_token %}
+                        {% if mine.is_matched %}
+                            <button type="submit" class="button tm-btn-back">Tôi tìm tiếp</button>
+                            <span class="tm-hint">Mẩu tin đang ở trạng thái <b>đã khớp</b>.</span>
+                        {% else %}
+                            <button type="submit" class="button tm-btn-done">✓ Đánh dấu đã khớp</button>
+                            <span class="tm-hint">Đã đủ đội? Đánh dấu để người khác biết.</span>
+                        {% endif %}
+                    </form>
+                    <form method="post" action="{{ url('hcmus_teammate_delete', mine.id) }}"
+                          onsubmit="return confirm('Xoá mẩu tin của bạn?')">
+                        {% csrf_token %}
+                        <button type="submit" class="button tm-btn-del">Xoá mẩu tin</button>
+                    </form>
+                </div>
+            {% endif %}
+
+            <form method="post" class="tm-form">
+                {% csrf_token %}
+                {% if form.errors %}
+                    <div class="alert alert-danger">{{ form.errors }}</div>
+                {% endif %}
+                {% for field in form %}
+                    <div class="tm-field">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                            <span class="tm-help">{{ field.help_text }}</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                <button type="submit" class="button">{% if mine %}Lưu{% else %}Đăng{% endif %}</button>
+            </form>
+        {% endif %}
+    </div>
+
+    {# ---------------- bảng tin ---------------- #}
+    {% if not posts %}
+        <p class="tm-empty">Chưa có mẩu tin nào. Bạn đăng đầu tiên nhé.</p>
+    {% else %}
+        <div class="tm-cards">
+            {% for p in posts %}
+                <div class="tm-card{% if p.is_matched %} tm-card-matched{% endif %}">
+                    <div class="tm-card-head">
+                        <span class="tm-name">{{ p.display_name }}</span>
+                        {% if p.is_matched %}
+                            <span class="tm-badge tm-badge-matched">Đã khớp</span>
+                        {% else %}
+                            <span class="tm-badge tm-badge-looking">Đang tìm</span>
+                        {% endif %}
+                    </div>
+                    <div class="tm-card-user">{{ link_user(p.profile) }}
+                        {% if p.cohort %}<span class="tm-cohort">{{ p.cohort }}</span>{% endif %}
+                    </div>
+
+                    {% if p.strengths %}
+                        <div class="tm-row"><span class="tm-label">Thế mạnh</span>{{ p.strengths }}</div>
+                    {% endif %}
+                    {% if p.achievements %}
+                        <div class="tm-row"><span class="tm-label">Thành tích</span>{{ p.achievements }}</div>
+                    {% endif %}
+                    {% if p.note %}
+                        <div class="tm-row"><span class="tm-label">Ghi chú</span>{{ p.note }}</div>
+                    {% endif %}
+                    {% if p.contact %}
+                        <div class="tm-row"><span class="tm-label">Liên hệ</span>{{ p.contact }}</div>
+                    {% endif %}
+                    {% if p.is_matched and p.team_name %}
+                        <div class="tm-row"><span class="tm-label">Đội</span><b>{{ p.team_name }}</b></div>
+                    {% endif %}
+
+                    <div class="tm-card-foot">
+                        <span>cập nhật {{ relative_time(p.modified) }}</span>
+                        {% if request.user.is_authenticated and request.user.is_staff
+                              and p.profile_id != request.profile.id %}
+                            <form method="post" action="{{ url('hcmus_teammate_delete', p.id) }}"
+                                  class="tm-staff-del"
+                                  onsubmit="return confirm('Xoá mẩu tin này?')">
+                                {% csrf_token %}
+                                <button type="submit" class="tm-link-btn">Xoá</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endblock %}

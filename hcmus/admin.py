@@ -19,7 +19,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from hcmus.models import (CalendarEvent, ContestPrinter, HomeSection, JudgeSwitch, PermSet,
                           Printer, PrintRequest, Ranking, RankingContest, SidebarSection,
-                          TeamRoom, UserScore)
+                          TeammatePost, TeamRoom, UserScore)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -666,3 +666,19 @@ try:
 except Exception:   # noqa: BLE001  hỏng chỗ này không được làm sập admin; Contest giữ admin gốc
     import logging
     logging.getLogger('hcmus').exception('Không gắn được ContestPrinterInline vào ContestAdmin')
+
+
+@admin.register(TeammatePost)
+class TeammatePostAdmin(admin.ModelAdmin):
+    """Bảng tin tìm teammate. Người dùng tự đăng/sửa/xoá ở /tim-teammate/; admin
+    vào đây chỉ để dọn tin rác hoặc sửa giúp, không phải để duyệt bài."""
+    list_display = ('display_name', 'username', 'cohort', 'status', 'team_name', 'modified')
+    list_filter = ('status',)
+    search_fields = ('display_name', 'cohort', 'strengths', 'achievements',
+                     'profile__user__username')
+    autocomplete_fields = ('profile',)
+    ordering = ('-modified',)
+
+    @admin.display(description=_('user'), ordering='profile__user__username')
+    def username(self, obj):
+        return obj.profile.user.username

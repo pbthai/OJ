@@ -12,11 +12,12 @@ Nhờ vậy Resolver không bao giờ đông cứng phần final theo một lầ
 import json
 import os
 
+from django import forms
 from django.conf import settings
-from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
 from django.http import (FileResponse, Http404, HttpResponse,
-                         HttpResponseBadRequest, JsonResponse)
+                         HttpResponseBadRequest, HttpResponseRedirect, JsonResponse)
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -26,7 +27,7 @@ from django.views.decorators.http import require_POST
 
 from hcmus import statement_pdf
 from hcmus.health import snapshot as health_snapshot
-from hcmus.models import JudgeSwitch, Ranking
+from hcmus.models import JudgeSwitch, Ranking, TeammatePost
 from hcmus.ranking import compute as compute_ranking
 from hcmus.tasks import build_contest_statement
 from judge.models import Contest, ContestParticipation
@@ -593,3 +594,89 @@ def print_submission(request, submission):
         return result(True, _('Đã gửi bài đến máy in (%(p)d trang). Giám thị sẽ mang bản in tới bàn của bạn.')
                       % {'p': pages})
     return result(False, _('Gửi máy in lỗi: %s. Báo giám thị.') % msg)
+
+
+# ---------------------------------------------------------------- tìm teammate
+
+class TeammatePostForm(forms.ModelForm):
+    """Form đăng/sửa mẩu tin tìm teammate.
+
+    KHÔNG có field `status`: trạng thái đổi bằng nút riêng (teammate_status) để
+    một cú bấm là xong, không phải mở form sửa rồi lưu lại.
+    """
+    class Meta:
+        model = TeammatePost
+        fields = ['display_name', 'cohort', 'strengths', 'achievements',
+                  'contact', 'note', 'team_name']
+        widgets = {
+            'achievements': forms.Textarea(attrs={'rows': 3}),
+            'note': forms.Textarea(attrs={'rows': 3}),
+        }
+
+
+def teammate_board(request):
+    """Bảng tin tìm teammate: ai cũng đọc được, đăng nhập mới đăng được.
+
+    Mỗi người một mẩu tin nên form vừa dùng để tạo vừa dùng để sửa (instance là
+    mẩu tin sẵn có nếu đã đăng).
+    """
+    mine = None
+    if request.user.is_authenticated:
+        mine = TeammatePost.objects.filter(profile=request.user.profile).first()
+
+    if request.method == 'POST':
+        if not request.user.is_authenticated:
+            raise PermissionDenied()
+        form = TeammatePostForm(request.POST, instance=mine)
+        if form.is_valid():
+            post = form.save(commit=False)
+            post.profile = request.user.profile
+            post.save()
+            return HttpResponseRedirect(reverse('hcmus_teammate') + '#cua-toi')
+    else:
+        initial = {}
+        if mine is None and request.user.is_authenticated:
+            profile = request.user.profile
+            initial['display_name'] = (profile.username_display_override
+                                       or request.user.first_name or request.user.username)
+        form = TeammatePostForm(instance=mine, initial=initial)
+
+    posts = TeammatePost.board()
+    only_looking = request.GET.get('loc') == 'dang-tim'
+    if only_looking:
+        posts = posts.filter(status=TeammatePost.LOOKING)
+    posts = list(posts)
+
+    return render(request, 'hcmus/teammate.html', {
+        'title': 'Tìm teammate',
+        'posts': posts,
+        'mine': mine,
+        'form': form,
+        'only_looking': only_looking,
+        'looking_count': TeammatePost.objects.filter(status=TeammatePost.LOOKING).count(),
+        'total_count': TeammatePost.objects.count(),
+    })
+
+
+@login_required
+@require_POST
+def teammate_status(request):
+    """Người đăng tự bật/tắt "đã khớp" cho mẩu tin của mình."""
+    post = get_object_or_404(TeammatePost, profile=request.user.profile)
+    post.status = TeammatePost.LOOKING if post.is_matched else TeammatePost.MATCHED
+    if not post.is_matched:
+        # Quay lại tìm tiếp thì tên đội cũ không còn đúng nữa.
+        post.team_name = ''
+    post.save(update_fields=['status', 'team_name', 'modified'])
+    return HttpResponseRedirect(reverse('hcmus_teammate') + '#cua-toi')
+
+
+@login_required
+@require_POST
+def teammate_delete(request, pk):
+    """Xoá mẩu tin. Chủ mẩu tin xoá của mình; staff dọn được mẩu tin rác."""
+    post = get_object_or_404(TeammatePost, pk=pk)
+    if post.profile_id != request.user.profile.id and not request.user.is_staff:
+        raise PermissionDenied()
+    post.delete()
+    return HttpResponseRedirect(reverse('hcmus_teammate'))

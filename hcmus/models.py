@@ -166,12 +166,14 @@ class HomeSection(models.Model):
     CONTEST = 'contest'
     CUSTOM = 'custom'
     FEED = 'feed'
+    TEAMMATE = 'teammate'
     KINDS = (
         (POST, _('Blog post')),
         (RANKING, _('Team ranking')),
         (CONTEST, _('Contest')),
         (CUSTOM, _('Custom content')),
         (FEED, _('Blog feed (the usual list of posts)')),
+        (TEAMMATE, 'Bảng tin tìm teammate'),
     )
 
     kind = models.CharField(max_length=16, choices=KINDS, default=CUSTOM, verbose_name=_('kind'))
@@ -204,10 +206,23 @@ class HomeSection(models.Model):
     def display_title(self):
         if self.title:
             return self.title
+        if self.kind == self.TEAMMATE:
+            return 'Tìm teammate'
         obj = self.target
         if obj is None:
             return ''
         return getattr(obj, 'title', None) or getattr(obj, 'name', '')
+
+    @property
+    def teammate_posts(self):
+        """Mẩu tin cho khối 'tìm teammate' trên trang chủ (xem TeammatePost).
+
+        Chủ động lấy ở đây thay vì bơm từ view trang chủ: khối này thuần dữ liệu
+        của app hcmus, để trong model thì judge/views/blog.py không phải biết gì
+        thêm. `limit` = 0 nghĩa là hiện tất cả, giống các khối khác.
+        """
+        qs = TeammatePost.board()
+        return qs[:self.limit] if self.limit else qs
 
     @property
     def target(self):
@@ -832,3 +847,71 @@ class UserScore(models.Model):
 
     def __str__(self):
         return f'{self.profile} — {self.total:g}'
+
+
+class TeammatePost(models.Model):
+    """Một mẩu tin "tìm teammate" do chính người dùng đăng và tự quản.
+
+    Mỗi tài khoản một mẩu (OneToOne) chứ không cho đăng nhiều lần: đây là hồ sơ
+    tìm đội của người đó, cần sửa thì sửa tại chỗ. Bảng tin vì thế không bị một
+    người dùng đăng lặp đẩy trôi người khác.
+
+    Trạng thái do CHÍNH người đăng đổi, không cần admin duyệt: ghép được đội rồi
+    thì bấm "đã khớp", mẩu tin vẫn còn đó nhưng lùi xuống cuối và làm mờ, để người
+    khác biết mà thôi liên hệ. Không tự xoá khi khớp — người dùng có thể quay lại
+    tìm tiếp (đổi trạng thái ngược lại) mà không phải gõ lại từ đầu.
+    """
+    LOOKING = 'looking'
+    MATCHED = 'matched'
+    STATUSES = (
+        (LOOKING, 'Đang tìm teammate'),
+        (MATCHED, 'Đã khớp'),
+    )
+
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE,
+                                   related_name='teammate_post', verbose_name='tài khoản')
+    display_name = models.CharField(max_length=100, verbose_name='tên hiển thị',
+                                    help_text='Tên bạn muốn hiện trên mẩu tin.')
+    cohort = models.CharField(max_length=40, blank=True, verbose_name='khoá',
+                              help_text='Ví dụ: K22, CTT 2023, 12A1...')
+    strengths = models.CharField(max_length=200, blank=True, verbose_name='thế mạnh',
+                                 help_text='Mảng bạn làm tốt: quy hoạch động, đồ thị, '
+                                           'hình học, số học...')
+    achievements = models.TextField(blank=True, verbose_name='thành tích',
+                                    help_text='Giải thưởng, kỳ thi từng dự, rating...')
+    contact = models.CharField(max_length=200, blank=True, verbose_name='liên hệ',
+                               help_text='Facebook, Discord, email... để người khác liên lạc được.')
+    note = models.TextField(blank=True, verbose_name='ghi chú',
+                            help_text='Điều khác muốn nói: cần teammate thế nào, '
+                                      'thời gian luyện tập được...')
+    status = models.CharField(max_length=10, choices=STATUSES, default=LOOKING,
+                              verbose_name='trạng thái')
+    team_name = models.CharField(max_length=100, blank=True, verbose_name='tên đội',
+                                 help_text='Khi đã khớp, tên đội của bạn (không bắt buộc).')
+    created = models.DateTimeField(auto_now_add=True, verbose_name='đăng lúc')
+    modified = models.DateTimeField(auto_now=True, verbose_name='sửa lần cuối')
+
+    class Meta:
+        verbose_name = 'mẩu tin tìm teammate'
+        verbose_name_plural = 'mẩu tin tìm teammate'
+        ordering = ['-modified']
+
+    def __str__(self):
+        return f'{self.display_name} ({self.profile.user.username})'
+
+    @property
+    def is_matched(self):
+        return self.status == self.MATCHED
+
+    @classmethod
+    def board(cls):
+        """Toàn bộ mẩu tin, người còn đang tìm xếp trước, mới sửa xếp trên.
+
+        Sắp bằng Case/When chứ không dựa vào thứ tự bảng chữ cái của giá trị
+        status: 'looking' < 'matched' chỉ là tình cờ, đổi tên trạng thái một cái
+        là thứ tự đảo lộn mà không ai nhận ra.
+        """
+        return (cls.objects.select_related('profile__user')
+                .annotate(_done=models.Case(models.When(status=cls.MATCHED, then=1),
+                                            default=0, output_field=models.IntegerField()))
+                .order_by('_done', '-modified'))

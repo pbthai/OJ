@@ -42,6 +42,45 @@
             {# Luồng bài blog thường, render ở đúng vị trí đã sắp #}
             {% include "blog/post-loop.html" %}
 
+        {% elif s.kind == 'teammate' %}
+            {# Bảng tin tìm teammate: ở trang chủ chỉ liệt kê gọn, chi tiết + form
+               đăng nằm ở /tim-teammate/. Dữ liệu lấy từ s.teammate_posts (model tự
+               truy vấn) nên view trang chủ không phải biết gì thêm. #}
+            {% include "hcmus/teammate-styles.html" %}
+            <div class="hs-block">
+                <h2 class="hs-title">
+                    <a href="{{ url('hcmus_teammate') }}">{{ s.display_title }}</a>
+                </h2>
+                <div class="hs-body">
+                    {% set tm_posts = s.teammate_posts %}
+                    {% if not tm_posts %}
+                        <p class="hs-meta">Chưa có mẩu tin nào.
+                            <a href="{{ url('hcmus_teammate') }}">Đăng mẩu đầu tiên</a> →
+                        </p>
+                    {% else %}
+                        <ul class="tm-home-list">
+                            {% for p in tm_posts %}
+                                <li class="tm-home-item">
+                                    <span class="tm-name">{{ p.display_name }}</span>
+                                    {% if p.cohort %}<span class="tm-cohort">{{ p.cohort }}</span>{% endif %}
+                                    {% if p.is_matched %}
+                                        <span class="tm-badge tm-badge-matched">Đã khớp</span>
+                                    {% else %}
+                                        <span class="tm-badge tm-badge-looking">Đang tìm</span>
+                                    {% endif %}
+                                    {% if p.strengths %}
+                                        <div class="tm-home-meta">{{ p.strengths }}</div>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                        <p class="hs-more">
+                            <a href="{{ url('hcmus_teammate') }}">Xem cả bảng tin</a> →
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+
         {% elif s.kind == 'contest' %}
             <div class="hs-block">
                 <h2 class="hs-title">

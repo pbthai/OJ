@@ -1,0 +1,61 @@
+{# Style dùng chung cho trang /tim-teammate/ và khối "tìm teammate" ở trang chủ. #}
+<style>
+    .tm-intro { color: #666; margin: .6em 0 1em; }
+    .tm-toolbar { display: flex; justify-content: space-between; align-items: baseline;
+                  flex-wrap: wrap; gap: .6em; margin-bottom: 1em; }
+    .tm-counts { color: #666; }
+    .tm-filter { font-size: .95em; }
+
+    .tm-mine { border: 1px solid #ddd; border-radius: 6px; padding: .8em 1em 1em;
+               margin-bottom: 1.6em; background: rgba(0, 0, 0, .02); }
+    .tm-mine h3 { margin: .2em 0 .6em; }
+    .tm-mine-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6em;
+                       margin-bottom: .9em; }
+    .tm-hint { color: #777; font-size: .9em; }
+    .tm-btn-done { background: #2e7d32; }
+    .tm-btn-back { background: #6d6d6d; }
+    .tm-btn-del { background: #b3261e; }
+
+    .tm-field { margin-bottom: .7em; }
+    .tm-field label { display: block; font-weight: 600; margin-bottom: .15em; }
+    .tm-field input[type="text"], .tm-field textarea { width: 100%; box-sizing: border-box; }
+    .tm-help { display: block; color: #888; font-size: .85em; margin-top: .1em; }
+
+    /* Thẻ tin: lưới tự co, hẹp thì tự về một cột (điện thoại). */
+    .tm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+                gap: 1em; }
+    .tm-card { border: 1px solid #ddd; border-left: 4px solid #4a90d9; border-radius: 6px;
+               padding: .7em .9em; }
+    .tm-card-matched { border-left-color: #2e7d32; opacity: .72; }
+    .tm-card-head { display: flex; justify-content: space-between; align-items: baseline;
+                    gap: .5em; }
+    .tm-name { font-weight: 600; font-size: 1.1em; }
+    .tm-badge { font-size: .75em; padding: .1em .5em; border-radius: 10px; white-space: nowrap; }
+    .tm-badge-looking { background: #e3f0fb; color: #1a5f9e; }
+    .tm-badge-matched { background: #e6f4e6; color: #2e7d32; }
+    .tm-card-user { margin: .15em 0 .5em; font-size: .95em; }
+    .tm-cohort { color: #777; margin-left: .4em; }
+    .tm-row { margin: .25em 0; font-size: .95em; white-space: pre-line; }
+    .tm-label { display: inline-block; min-width: 5.6em; color: #777; font-size: .88em; }
+    .tm-card-foot { margin-top: .6em; color: #999; font-size: .85em;
+                    display: flex; justify-content: space-between; align-items: baseline; }
+    .tm-link-btn { background: none; border: 0; padding: 0; color: #b3261e; cursor: pointer;
+                   font-size: .95em; text-decoration: underline; }
+    .tm-empty { color: #777; }
+
+    /* Khối gọn ở trang chủ */
+    .tm-home-list { margin: 0; padding: 0; list-style: none; }
+    .tm-home-item { padding: .35em 0; border-bottom: 1px dashed #e0e0e0; }
+    .tm-home-item:last-child { border-bottom: 0; }
+    .tm-home-meta { color: #888; font-size: .9em; }
+
+    @media (prefers-color-scheme: dark) {
+        .tm-mine, .tm-card { border-color: #444; }
+        .tm-mine { background: rgba(255, 255, 255, .03); }
+        .tm-intro, .tm-counts, .tm-hint, .tm-cohort, .tm-label, .tm-empty { color: #aaa; }
+        .tm-help { color: #999; }
+        .tm-badge-looking { background: #16334d; color: #9ecbf0; }
+        .tm-badge-matched { background: #1c3a1c; color: #a5d6a7; }
+        .tm-home-item { border-bottom-color: #3a3a3a; }
+    }
+</style>
