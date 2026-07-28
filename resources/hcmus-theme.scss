@@ -3,6 +3,7 @@
 //
 // Phần màu sắc nằm ở vars-default.scss / vars-dark.scss (biến $color_brand...).
 // File này chỉ lo hình khối: thẻ nổi, khoảng thở, bo góc, nút.
+@use 'sass:color';
 @use "vars" as *;
 
 // ---- Ô cột phải: đầu ô màu thương hiệu, thân ô là thẻ trắng ----
@@ -62,9 +63,11 @@
 }
 
 // ---- Bảng: đầu bảng cùng tông thương hiệu ----
-.table thead th {
-    background: $color_brand_soft;
-    color: $color_primary90;
+// Bản gốc để đầu bảng nền gần đen ($color_primary75) chữ trắng, và các cột sắp
+// xếp được là thẻ <a> cũng màu trắng. Nên đổi nền sang XANH ĐẬM chứ không phải
+// nền sáng: nền sáng thì chữ trắng của bản gốc chìm hẳn (đã thử và hỏng).
+.table th {
+    background-color: $color_brand;
 }
 
 // Khối tuỳ biến trang chủ (hcmus/home-sections.html) dùng chung tông viền.
@@ -103,4 +106,106 @@
         border-left: none;
         padding-left: 0;
     }
+}
+
+// ================= Bảng xếp hạng =================
+
+// Hàng sáng lên khi rê chuột: bảng rộng, nhiều cột, dò theo hàng rất dễ lạc.
+.table tbody tr:hover {
+    background-color: rgba($color_brand, .06);
+}
+
+#ranking-table {
+    // Ô cao hơn một chút: bảng ICPC dày đặc số, thoáng ra thì dò đỡ mỏi mắt.
+    td {
+        height: 2.7em;
+    }
+
+    // Nhãn bài (A, B, C...) là thẻ <a> màu trắng của bản gốc — trên nền xanh mới
+    // vẫn đọc tốt, giữ nguyên; chỉ bỏ màu xanh lá chói khi rê chuột.
+    th a:hover {
+        color: $color_brand_soft;
+    }
+}
+
+// Tên tài khoản chưa có rating quá nhạt, đọc mỏi trên bảng dài. Phải đổi theo
+// HAI chiều ngược nhau: nền sáng thì làm chữ tối lại, nền tối thì làm sáng lên —
+// dùng chung một công thức là hỏng mất một trong hai chế độ.
+.rate-none, .rate-none a {
+    color: if($is_light_theme,
+              color.adjust($color_rating_none, $lightness: -22%),
+              color.adjust($color_rating_none, $lightness: 12%));
+}
+
+// ================= Phân trang =================
+// Bản gốc là dải nút gần đen; trên nền sáng nhìn nặng và lạc tông.
+ul.pagination > li > {
+    a, span {
+        color: $color_primary90;
+        background-color: $color_primary0;
+        border-color: $color_primary25;
+    }
+}
+
+ul.pagination a:hover {
+    background: $color_brand_soft;
+}
+
+ul.pagination > .active-page > {
+    a, span {
+        background-color: $color_brand;
+        color: $color_primary0;
+    }
+}
+
+ul.pagination > .disabled-page > {
+    a, span {
+        background-color: $color_primary0;
+        color: $color_primary33;
+    }
+}
+
+// ================= Danh sách bài nộp =================
+// Các hàng nối liền nhau thành một khối (bản gốc bỏ border-top của hàng sau), nên
+// bo góc ở hàng đầu và hàng cuối để cả khối thành một thẻ, thay vì bo từng hàng.
+.submission-row {
+    overflow: hidden;
+
+    &:first-of-type {
+        border-top-left-radius: $widget_border_radius;
+        border-top-right-radius: $widget_border_radius;
+    }
+
+    &:last-of-type {
+        border-bottom-left-radius: $widget_border_radius;
+        border-bottom-right-radius: $widget_border_radius;
+    }
+
+    // Bản gốc rê chuột đổi sang xám; đổi sang tông xanh nhạt cho khớp chủ đề.
+    &:hover {
+        background: rgba($color_brand, .05);
+    }
+}
+
+// ================= Trang nộp bài =================
+// Ô chọn ngôn ngữ là <select> trần của trình duyệt, cao 1 dòng, sát khung soạn
+// thảo; nâng cho cân với nút "Nộp bài".
+#submit-wrapper, .submit-bar {
+    select, #id_language {
+        // font-size phải đặt trước: 'height' tính theo em của CHÍNH thẻ select, mà
+        // select mặc định chữ nhỏ hơn trang nên 2.4em ra thấp hơn mong đợi.
+        font-size: 1em;
+        height: 2.4em;
+        padding: 0 .5em;
+        border: 1px solid $color_primary25;
+        border-radius: $widget_border_radius;
+        background-color: $color_primary0;
+        color: $color_primary100;
+    }
+}
+
+// Khung soạn thảo có viền + bo góc cho khớp phần còn lại của trang.
+#ace_source, .ace_editor {
+    border: 1px solid $color_primary25;
+    border-radius: $widget_border_radius;
 }
