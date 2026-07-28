@@ -13,10 +13,16 @@ $color_primary75: #ccc;     // widget
 $color_primary90: #eee;
 $color_primary100: #f8f8f8;
 
-$color_link50: #06d;    // default (title)
-$color_link75: #6bf;    // default
-$color_link100: #49e;   // hover
-$color_link200: #d83;   // active
+// FIT-HCMUS: cùng tông xanh trường, chỉnh sáng lên cho nền tối.
+$color_brand: #1d4d78;      // xanh chủ đạo (navbar, đầu ô)
+$color_brand_dark: #143854; // trạng thái nhấn / hover
+$color_brand_soft: #16283a; // nền nhạt cùng tông
+$color_accent: #2fbfae;     // xanh ngọc
+
+$color_link50: #7db4e8;  // default (title)
+$color_link75: #8cc4f5;  // default
+$color_link100: #b3d9ff; // hover
+$color_link200: $color_accent;   // active
 
 $color_pageBg: #222;    // #222 because some elements should be darker than pageBg
 

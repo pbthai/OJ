@@ -14,12 +14,18 @@ $color_primary75: #231f20;  // widget
 $color_primary90: #111;
 $color_primary100: #000;
 
-$color_link50: #5b80b9;     // default (title)
-$color_link75: #1958c1;     // default
-$color_link100: #0645ad;    // hover
-$color_link200: #faa700;    // active
+// FIT-HCMUS: tông xanh của trường thay cho xanh mặc định của DMOJ.
+$color_brand: #00529b;      // xanh chủ đạo (navbar, đầu ô, nút chính)
+$color_brand_dark: #003f7d; // trạng thái nhấn / hover
+$color_brand_soft: #eef4fa; // nền nhạt cùng tông (vùng nổi bật)
+$color_accent: #0f9d8f;     // xanh ngọc, dùng điểm xuyết cho trạng thái tốt
 
-$color_pageBg: color.adjust($color_primary5, $lightness: 10%);
+$color_link50: #2b6cb0;     // default (title)
+$color_link75: $color_brand;   // default
+$color_link100: $color_brand_dark;  // hover
+$color_link200: $color_accent;      // active
+
+$color_pageBg: #f4f7fb;   // nền trang hơi ngả xanh cho đỡ chói
 
 // custom one-off colours
 $color_contest_ranking_disqualified: #ffa8a8;
@@ -80,7 +86,7 @@ $color_blog_text_muted: #8e8ea0;
 $color_blog_text_tertiary: #6b7280;
 $color_blog_hover_bg: #ececf1;
 $color_blog_active_bg: #202123;
-$color_blog_accent: #1958c1;
+$color_blog_accent: $color_brand;
 $color_blog_code_bg: #f7f7f7;
 $color_blog_blockquote_border: #292929;
 $color_blog_vote_active: #1a8917;

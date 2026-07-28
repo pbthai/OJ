@@ -1,9 +1,16 @@
 $highlight_blue: #1ba94c;
 $announcement_red: #ae0000;
 
-$base_font_size: 15px;
-$widget_border_radius: 4px;
+// FIT-HCMUS: 15px hơi nhỏ để đọc đề dài; 16px là cỡ chuẩn cho văn bản dài.
+$base_font_size: 16px;
+$widget_border_radius: 8px;
 
 $table_header_rounding: 6px;
+
+// Font chữ thường: Source Sans Pro đã có sẵn trong static (kèm subset tiếng Việt,
+// xem resources/source_sans_pro.css) nên KHÔNG phải tải thêm từ Google Fonts —
+// mạng trường chặn hay chậm cũng không ảnh hưởng. Trước đây body dùng
+// "Segoe UI", "Lucida Grande", Arial nên mỗi hệ điều hành ra một font khác nhau.
+$sans-fonts: "Source Sans Pro", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 
 $monospace-fonts: Consolas, "Andale Mono WT", "Andale Mono", "Lucida Console", "Lucida Sans Typewriter", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Liberation Mono", "Nimbus Mono L", Monaco, "Courier New", Courier, monospace;

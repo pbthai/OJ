@@ -1,0 +1,106 @@
+// FIT-HCMUS: lớp phủ giao diện, nạp CUỐI CÙNG trong style.scss nên đè được các
+// file gốc mà không phải sửa chúng. Gỡ tính năng = xoá một dòng @use ở style.scss.
+//
+// Phần màu sắc nằm ở vars-default.scss / vars-dark.scss (biến $color_brand...).
+// File này chỉ lo hình khối: thẻ nổi, khoảng thở, bo góc, nút.
+@use "vars" as *;
+
+// ---- Ô cột phải: đầu ô màu thương hiệu, thân ô là thẻ trắng ----
+.sidebox {
+    padding: 0 !important;
+    padding-bottom: 1.4em !important;
+}
+
+.sidebox h3 {
+    margin: 0;
+    background: $color_brand;
+    border-radius: $widget_border_radius $widget_border_radius 0 0;
+    padding: 7px 12px;
+    font-size: 1.15em;
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+.sidebox-content {
+    margin: 0;
+    background: $color_primary0;
+    border: 1px solid $color_primary25;
+    border-top: none;
+    border-radius: 0 0 $widget_border_radius $widget_border_radius;
+    padding: 10px 12px;
+
+    // Ô dạng bảng tự bỏ đệm để bảng chạm mép thẻ (giữ đúng ý bản gốc).
+    &.sidebox-table {
+        padding: 0;
+        overflow: hidden;
+    }
+}
+
+// ---- Bài blog ở cột chính: tách thành thẻ rời cho dễ quét mắt ----
+.blog-box {
+    background: $color_primary0;
+    border: 1px solid $color_primary25;
+    border-radius: 12px;
+    padding: 1.1em 1.3em;
+    margin-bottom: 1.1em;
+}
+
+// ---- Nút bấm ----
+.button, button, input[type=submit], a.button {
+    border-radius: $widget_border_radius;
+    font-family: $sans-fonts;
+    transition: background-color .12s ease-in-out;
+}
+
+// ---- Nội dung đọc: giãn dòng thoáng hơn cho đề bài dài ----
+.content-description {
+    line-height: 1.7;
+
+    p {
+        margin: 0 0 1em;
+    }
+}
+
+// ---- Bảng: đầu bảng cùng tông thương hiệu ----
+.table thead th {
+    background: $color_brand_soft;
+    color: $color_primary90;
+}
+
+// Khối tuỳ biến trang chủ (hcmus/home-sections.html) dùng chung tông viền.
+.hs-body {
+    border-left-color: $color_brand;
+}
+
+// ---- Chữ phụ trên navbar ----
+// Bản gốc cho navbar màu xám #5c5954 vì nền navbar vốn gần đen. Nền xanh thì
+// chữ xám chìm hẳn (chữ "hoặc" giữa Đăng nhập / Đăng ký gần như không đọc được).
+#user-links .anon {
+    color: rgba(255, 255, 255, .82);
+}
+
+// ---- Bài blog ở cột chính thành thẻ rời ----
+// Bản gốc ngăn cách các bài bằng một đường kẻ ngang; đổi sang thẻ có viền cho
+// mỗi bài tách bạch, dễ quét mắt khi trang chủ có nhiều mục.
+.blog-content .post {
+    background: $color_primary0;
+    border: 1px solid $color_primary25;
+    border-radius: 12px;
+    padding: 1.1em 1.4em 1.2em;
+    margin: 0 0.5em 1.1em;
+
+    &:first-child {
+        margin-top: 1.1em;
+    }
+
+    // Đường kẻ ngang cũ giữa các bài giờ thừa vì đã có viền thẻ.
+    .blog-description, .post-full {
+        border-bottom: none;
+    }
+
+    // Vạch dọc bên trái phần tóm tắt cũng thừa nốt khi bài đã nằm trong thẻ.
+    .summary {
+        border-left: none;
+        padding-left: 0;
+    }
+}

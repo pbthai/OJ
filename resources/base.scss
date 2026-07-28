@@ -107,9 +107,10 @@ body {
     min-height: 100%;
     margin: 0 auto;
     font-size: $base_font_size;
-    line-height: 1.231;
+    line-height: 1.55;
     background: $color_primary5;
-    font-family: "Segoe UI", "Lucida Grande", Arial, sans-serif;
+    font-family: $sans-fonts;
+    -webkit-font-smoothing: antialiased;
     color: $color_primary100;
     height: 100%;
 }
