@@ -657,8 +657,8 @@ class PublicScoreboardInline(admin.StackedInline):
     fields = ('is_enabled', 'note', 'link', 'token')
     readonly_fields = ('link',)
     verbose_name = 'Bảng xếp hạng công khai'
-    verbose_name_plural = ('Bảng xếp hạng công khai (ai có link là xem được kết quả, '
-                           'kỳ thi vẫn riêng tư)')
+    verbose_name_plural = ('Bảng xếp hạng công khai — tick "bật link công khai" rồi Lưu '
+                           '(ai có link là xem được kết quả, kỳ thi vẫn riêng tư)')
 
     @admin.display(description='link công khai')
     def link(self, obj):

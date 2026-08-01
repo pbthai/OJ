@@ -941,8 +941,15 @@ class PublicScoreboard(models.Model):
     token = models.CharField(max_length=64, unique=True, db_index=True,
                              default=_new_scoreboard_token, verbose_name='mã liên kết',
                              help_text='Phần bí mật trong đường dẫn. Đổi mã = link cũ hết dùng được.')
-    is_enabled = models.BooleanField(default=True, verbose_name='bật link công khai',
-                                     help_text='Bỏ tick là link tắt ngay, không cần xoá.')
+    # Mặc định TẮT, không phải bật. Hai lý do, lý do sau quan trọng hơn:
+    # 1. bảng xếp hạng chỉ nên công khai khi có người cố ý bật;
+    # 2. Django chỉ lưu form inline khi has_changed() = True. Nếu ô này bật sẵn thì
+    #    người dùng mở trang, thấy đã tick, bấm Lưu -> form y hệt giá trị mặc định
+    #    -> Django coi là form rỗng, KHÔNG tạo bản ghi và cũng không báo lỗi gì.
+    #    Để mặc định tắt thì hành động "tick vào" mới là thay đổi thật và được lưu.
+    is_enabled = models.BooleanField(default=False, verbose_name='bật link công khai',
+                                     help_text='Tick vào đây rồi bấm Lưu để tạo link. '
+                                               'Bỏ tick là link tắt ngay, không cần xoá.')
     note = models.CharField(max_length=200, blank=True, verbose_name='ghi chú',
                             help_text='Hiện ngay dưới tên kỳ thi trên trang công khai '
                                       '(ví dụ: "Kết quả chính thức").')
