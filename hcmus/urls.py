@@ -22,6 +22,8 @@ urlpatterns = [
     path('lich/', views.calendar_page, name='hcmus_calendar'),
     path('lich/cong-khai.ics', views.calendar_ical, name='hcmus_calendar_ical'),
     path('tai-khoan/', views.accounts_page, name='hcmus_accounts'),
+    # Bảng xếp hạng công khai qua link bí mật (kỳ thi vẫn riêng tư).
+    path('bang-diem/<str:token>/', views.public_scoreboard, name='hcmus_public_scoreboard'),
     path('tim-teammate/', views.teammate_board, name='hcmus_teammate'),
     path('tim-teammate/trang-thai/', views.teammate_status, name='hcmus_teammate_status'),
     path('tim-teammate/xoa/<int:pk>/', views.teammate_delete, name='hcmus_teammate_delete'),

@@ -14,6 +14,7 @@ import os
 
 from django import forms
 from django.conf import settings
+from django.core.cache import cache
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
 from django.http import (FileResponse, Http404, HttpResponse,
@@ -27,7 +28,7 @@ from django.views.decorators.http import require_POST
 
 from hcmus import statement_pdf
 from hcmus.health import snapshot as health_snapshot
-from hcmus.models import JudgeSwitch, Ranking, TeammatePost
+from hcmus.models import JudgeSwitch, PublicScoreboard, Ranking, TeammatePost
 from hcmus.ranking import compute as compute_ranking
 from hcmus.tasks import build_contest_statement
 from judge.models import Contest, ContestParticipation
@@ -680,3 +681,77 @@ def teammate_delete(request, pk):
         raise PermissionDenied()
     post.delete()
     return HttpResponseRedirect(reverse('hcmus_teammate'))
+
+
+# ------------------------------------------------- bảng xếp hạng công khai
+
+def _public_rows(contest):
+    """Dựng bảng xếp hạng để hiện công khai, từ đúng dữ liệu vnoj đã tính.
+
+    Dùng lại build_payload của resolver nên số liệu khớp bảng chính thức. Nếu kỳ
+    thi đang ĐÓNG BĂNG thì trang công khai cũng hiện bản đóng băng — công bố sớm
+    hơn bảng trong site là hỏng luật ICPC.
+    """
+    payload = build_payload(contest)
+    frozen = contest.is_frozen
+
+    rows = []
+    for team in payload['teams']:
+        totals = team['frozen'] if frozen else team['final']
+        cells = []
+        for cell in team['cells']:
+            if frozen and cell['pending']:
+                cells.append({'state': 'pending', 'top': '?',
+                              'bottom': cell['final']['tries'] or ''})
+            elif (frozen and cell['frozen']['solved']) or (not frozen and cell['final']['solved']):
+                tries = cell['frozen']['tries'] if frozen else cell['final']['tries']
+                cells.append({'state': 'ac', 'top': cell['final']['minutes'],
+                              'bottom': f'{tries} lần' if tries else ''})
+            else:
+                tries = cell['frozen']['tries'] if frozen else cell['final']['tries']
+                cells.append({'state': 'wa' if tries else 'none',
+                              'top': f'{tries} lần' if tries else '', 'bottom': ''})
+        rows.append({'name': team['name'], 'org': team['org'],
+                     'solved': totals['solved'], 'penalty': totals['penalty'], 'cells': cells})
+
+    # Xếp hạng: nhiều bài hơn đứng trên, bằng bài thì ít phạt hơn đứng trên.
+    rows.sort(key=lambda r: (-r['solved'], r['penalty'], r['name'].lower()))
+    rank = 0
+    for i, r in enumerate(rows):
+        # Cùng số bài và cùng phạt thì cùng hạng (kiểu xếp hạng thi đấu).
+        if i and (rows[i - 1]['solved'], rows[i - 1]['penalty']) == (r['solved'], r['penalty']):
+            r['rank'] = rank
+        else:
+            rank = i + 1
+            r['rank'] = rank
+    return {'problems': payload['contest']['problems'], 'rows': rows, 'frozen': frozen}
+
+
+def public_scoreboard(request, token):
+    """Trang chỉ-đọc, KHÔNG cần đăng nhập, cho kỳ thi riêng tư (xem PublicScoreboard).
+
+    Chỉ có tên đội + kết quả. Không có đề bài, bài nộp, mã nguồn — mở link này
+    không mở kỳ thi.
+    """
+    board = get_object_or_404(PublicScoreboard.objects.select_related('contest'),
+                              token=token, is_enabled=True)
+    contest = board.contest
+
+    # Cache ngắn: link công khai có thể bị F5 liên tục lúc đang thi, mà dựng bảng
+    # phải quét toàn bộ lượt dự thi.
+    cache_key = f'hcmus_public_scoreboard_{token}'
+    data = cache.get(cache_key)
+    if data is None:
+        data = _public_rows(contest)
+        cache.set(cache_key, data, 20)
+
+    now = timezone.now()
+    return render(request, 'hcmus/public-scoreboard.html', {
+        'title': f'Bảng xếp hạng — {contest.name}',
+        'contest': contest,
+        'board': board,
+        'problems': data['problems'],
+        'rows': data['rows'],
+        'frozen': data['frozen'],
+        'running': contest.start_time <= now < contest.end_time,
+    })

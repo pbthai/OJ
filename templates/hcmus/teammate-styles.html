@@ -49,13 +49,25 @@
     .tm-home-item:last-child { border-bottom: 0; }
     .tm-home-meta { color: #888; font-size: .9em; }
 
+    /* Chủ đề site theo CÀI ĐẶT TÀI KHOẢN (body[data-theme]), không theo hệ điều
+       hành; chỉ chế độ "tự động" mới nghe prefers-color-scheme. Viết selector phẳng
+       chứ không lồng: đây là CSS thuần trong <style>, không qua sass, mà CSS nesting
+       thì trình duyệt cũ không hiểu. */
+    body[data-theme="dark"] .tm-mine, body[data-theme="dark"] .tm-card { border-color: #444; }
+    body[data-theme="dark"] .tm-mine { background: rgba(255, 255, 255, .03); }
+    body[data-theme="dark"] .tm-intro, body[data-theme="dark"] .tm-counts, body[data-theme="dark"] .tm-hint, body[data-theme="dark"] .tm-cohort, body[data-theme="dark"] .tm-label, body[data-theme="dark"] .tm-empty { color: #aaa; }
+    body[data-theme="dark"] .tm-help { color: #999; }
+    body[data-theme="dark"] .tm-badge-looking { background: #16334d; color: #9ecbf0; }
+    body[data-theme="dark"] .tm-badge-matched { background: #1c3a1c; color: #a5d6a7; }
+    body[data-theme="dark"] .tm-home-item { border-bottom-color: #3a3a3a; }
+
     @media (prefers-color-scheme: dark) {
-        .tm-mine, .tm-card { border-color: #444; }
-        .tm-mine { background: rgba(255, 255, 255, .03); }
-        .tm-intro, .tm-counts, .tm-hint, .tm-cohort, .tm-label, .tm-empty { color: #aaa; }
-        .tm-help { color: #999; }
-        .tm-badge-looking { background: #16334d; color: #9ecbf0; }
-        .tm-badge-matched { background: #1c3a1c; color: #a5d6a7; }
-        .tm-home-item { border-bottom-color: #3a3a3a; }
+        body[data-theme="auto"] .tm-mine, body[data-theme="auto"] .tm-card { border-color: #444; }
+        body[data-theme="auto"] .tm-mine { background: rgba(255, 255, 255, .03); }
+        body[data-theme="auto"] .tm-intro, body[data-theme="auto"] .tm-counts, body[data-theme="auto"] .tm-hint, body[data-theme="auto"] .tm-cohort, body[data-theme="auto"] .tm-label, body[data-theme="auto"] .tm-empty { color: #aaa; }
+        body[data-theme="auto"] .tm-help { color: #999; }
+        body[data-theme="auto"] .tm-badge-looking { background: #16334d; color: #9ecbf0; }
+        body[data-theme="auto"] .tm-badge-matched { background: #1c3a1c; color: #a5d6a7; }
+        body[data-theme="auto"] .tm-home-item { border-bottom-color: #3a3a3a; }
     }
 </style>

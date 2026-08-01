@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{# Bảng xếp hạng công khai của một kỳ thi RIÊNG TƯ (hcmus.PublicScoreboard).
+   Trang chỉ-đọc, không cần đăng nhập, chỉ có tên đội + kết quả. #}
+{% block media %}
+    <style>
+        /* Chủ đề của site do CÀI ĐẶT TÀI KHOẢN quyết định (body[data-theme]), không
+           phải do hệ điều hành. Chỉ khi người dùng để "tự động" mới nghe
+           prefers-color-scheme — nghe thẳng hệ điều hành thì máy để nền tối mà site
+           đang sáng sẽ ra bảng tối trên trang sáng. */
+        body {
+            --ps-muted: #888;
+            --ps-sub: #555;
+            --ps-border: #ddd;
+            --ps-ac: #7ee787;
+            --ps-wa: #f0a1a1;
+            --ps-pending: #cbb3f0;
+            --ps-badge-bg: #e3f0fb;
+            --ps-badge-fg: #1a5f9e;
+            --ps-zebra: rgba(0, 0, 0, .02);
+        }
+
+        body[data-theme="dark"] {
+            --ps-muted: #aaa;
+            --ps-sub: #ccc;
+            --ps-border: #444;
+            --ps-ac: #2e7d32;
+            --ps-wa: #8c3b3b;
+            --ps-pending: #4a3a75;
+            --ps-badge-bg: #16334d;
+            --ps-badge-fg: #9ecbf0;
+            --ps-zebra: rgba(255, 255, 255, .03);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body[data-theme="auto"] {
+                --ps-muted: #aaa;
+                --ps-sub: #ccc;
+                --ps-border: #444;
+                --ps-ac: #2e7d32;
+                --ps-wa: #8c3b3b;
+                --ps-pending: #4a3a75;
+                --ps-badge-bg: #16334d;
+                --ps-badge-fg: #9ecbf0;
+                --ps-zebra: rgba(255, 255, 255, .03);
+            }
+        }
+
+        .ps-head { margin-bottom: .9em; }
+        .ps-note { color: var(--ps-sub); }
+        .ps-meta { color: var(--ps-muted); font-size: .92em; margin-top: .2em; }
+        .ps-frozen { display: inline-block; margin-left: .4em; padding: .1em .6em;
+                     border-radius: 10px; background: var(--ps-badge-bg);
+                     color: var(--ps-badge-fg); font-size: .8em; }
+        .ps-wrap { overflow-x: auto; }
+        table.ps { border-collapse: separate; border-spacing: 0; width: 100%; }
+        table.ps th, table.ps td { border: 1px solid var(--ps-border); padding: .35em .5em;
+                                   text-align: center; }
+        table.ps thead th { background: #1e4d8c; color: #fff; }
+        table.ps td.ps-team { text-align: left; white-space: nowrap; }
+        .ps-org { color: var(--ps-muted); font-size: .85em; margin-left: .4em; }
+        .ps-cell-top { font-weight: 600; }
+        .ps-cell-bottom { font-size: .78em; color: var(--ps-sub); }
+        tbody tr:nth-child(2n) td { background-color: var(--ps-zebra); }
+        /* Đặt SAU quy tắc kẻ sọc để màu ô không bị nền sọc đè. */
+        table.ps td.ps-ac { background-color: var(--ps-ac); }
+        table.ps td.ps-wa { background-color: var(--ps-wa); }
+        table.ps td.ps-pending { background-color: var(--ps-pending); }
+        .ps-legend { margin-top: .9em; color: var(--ps-muted); font-size: .9em; }
+        .ps-legend span { display: inline-block; padding: .05em .5em;
+                          border: 1px solid var(--ps-border); border-radius: 3px;
+                          margin-right: .5em; }
+        .ps-legend .ps-ac { background: var(--ps-ac); }
+        .ps-legend .ps-wa { background: var(--ps-wa); }
+        .ps-legend .ps-pending { background: var(--ps-pending); }
+    </style>
+    {% if running %}
+        {# Đang thi thì tự tải lại cho người xem khỏi phải F5. #}
+        <meta http-equiv="refresh" content="60">
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+    <div class="ps-head">
+        {% if board.note %}<p class="ps-note">{{ board.note }}</p>{% endif %}
+        <p class="ps-meta">
+            {{ contest.start_time|date("H:i d/m/Y") }} &ndash; {{ contest.end_time|date("H:i d/m/Y") }}
+            &middot; {{ problems|length }} bài &middot; {{ rows|length }} đội
+            {% if frozen %}
+                <span class="ps-frozen">Bảng đang đóng băng
+                    {{ contest.frozen_last_minutes }} phút cuối</span>
+            {% endif %}
+        </p>
+    </div>
+
+    {% if not rows %}
+        <p>Chưa có đội nào dự thi.</p>
+    {% else %}
+        <div class="ps-wrap">
+            <table class="ps">
+                <thead>
+                    <tr>
+                        <th>Hạng</th>
+                        <th style="text-align:left">Đội</th>
+                        <th>Số bài</th>
+                        <th>Phạt</th>
+                        {% for p in problems %}<th>{{ p.label }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                        <tr>
+                            <td>{{ r.rank }}</td>
+                            <td class="ps-team">{{ r.name }}
+                                {% if r.org %}<span class="ps-org">{{ r.org }}</span>{% endif %}
+                            </td>
+                            <td><b>{{ r.solved }}</b></td>
+                            <td>{{ r.penalty }}</td>
+                            {% for c in r.cells %}
+                                <td class="ps-{{ c.state }}">
+                                    {% if c.top %}<div class="ps-cell-top">{{ c.top }}</div>{% endif %}
+                                    {% if c.bottom %}<div class="ps-cell-bottom">{{ c.bottom }}</div>{% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="ps-legend">
+            <span class="ps-ac">Đã giải</span> ô trên là phút giải được, ô dưới là số lần nộp &middot;
+            <span class="ps-wa">Chưa giải</span> số lần nộp
+            {% if frozen %} &middot; <span class="ps-pending">?</span> nộp trong giờ đóng băng,
+                chưa công bố kết quả{% endif %}
+        </p>
+    {% endif %}
+{% endblock %}

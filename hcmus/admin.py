@@ -19,7 +19,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from hcmus.models import (CalendarEvent, ContestPrinter, HomeSection, JudgeSwitch, PermSet,
                           Printer, PrintRequest, Ranking, RankingContest, SidebarSection,
-                          TeammatePost, TeamRoom, UserScore)
+                          PublicScoreboard, TeammatePost, TeamRoom, UserScore)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -644,6 +644,32 @@ class CalendarEventAdmin(admin.ModelAdmin):
 # nạp app không quan trọng.
 # ---------------------------------------------------------------------------
 
+class PublicScoreboardInline(admin.StackedInline):
+    """Bật link xem bảng xếp hạng công khai ngay trong trang sửa kỳ thi.
+
+    Hiện sẵn link đầy đủ để copy: token dài, gõ tay thì sai, mà đây là thứ duy
+    nhất người ngoài cần để xem được.
+    """
+    model = PublicScoreboard
+    fk_name = 'contest'
+    max_num = 1
+    extra = 1
+    fields = ('is_enabled', 'note', 'link', 'token')
+    readonly_fields = ('link',)
+    verbose_name = 'Bảng xếp hạng công khai'
+    verbose_name_plural = ('Bảng xếp hạng công khai (ai có link là xem được kết quả, '
+                           'kỳ thi vẫn riêng tư)')
+
+    @admin.display(description='link công khai')
+    def link(self, obj):
+        if obj is None or not obj.pk:
+            return 'Lưu lại để hệ thống sinh link.'
+        url = obj.get_absolute_url()
+        if not obj.is_enabled:
+            return format_html('<span style="color:#b3261e">Đang TẮT</span> — {}', url)
+        return format_html('<a href="{0}" target="_blank">{0}</a>', url)
+
+
 class ContestPrinterInline(admin.StackedInline):
     model = ContestPrinter
     fk_name = 'contest'
@@ -659,13 +685,14 @@ try:
     from judge.models import Contest as _JudgeContest
 
     class ContestAdmin(_BaseContestAdmin):
-        inlines = list(_BaseContestAdmin.inlines) + [ContestPrinterInline]
+        inlines = list(_BaseContestAdmin.inlines) + [ContestPrinterInline,
+                                                     PublicScoreboardInline]
 
     admin.site.unregister(_JudgeContest)
     admin.site.register(_JudgeContest, ContestAdmin)
 except Exception:   # noqa: BLE001  hỏng chỗ này không được làm sập admin; Contest giữ admin gốc
     import logging
-    logging.getLogger('hcmus').exception('Không gắn được ContestPrinterInline vào ContestAdmin')
+    logging.getLogger('hcmus').exception('Không gắn được inline của hcmus vào ContestAdmin')
 
 
 @admin.register(TeammatePost)

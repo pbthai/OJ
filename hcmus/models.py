@@ -8,6 +8,7 @@ contest thì tính (-1 × trọng số); hoà điểm thì tổng penalty thấp
 model Team riêng, ContestParticipation gắn thẳng vào Profile.
 """
 import contextlib
+import secrets
 import threading
 
 from django.db import models
@@ -915,3 +916,44 @@ class TeammatePost(models.Model):
                 .annotate(_done=models.Case(models.When(status=cls.MATCHED, then=1),
                                             default=0, output_field=models.IntegerField()))
                 .order_by('_done', '-modified'))
+
+
+def _new_scoreboard_token():
+    """Mã liên kết ngẫu nhiên, đủ dài để không dò được bằng cách thử."""
+    return secrets.token_urlsafe(16)
+
+
+class PublicScoreboard(models.Model):
+    """Cho phép xem bảng xếp hạng của một kỳ thi RIÊNG TƯ qua một link bí mật.
+
+    vnoj gác mọi trang xếp hạng bằng access_check của contest, nên kỳ thi riêng tư
+    thì khách vãng lai không xem được — kể cả khi chỉ muốn khoe kết quả. Bảng này
+    mở đúng MỘT cửa: một trang chỉ-đọc, không đăng nhập, chỉ có tên đội + kết quả.
+    Đề bài, bài nộp, mã nguồn vẫn đóng như cũ.
+
+    Dùng mã ngẫu nhiên chứ không dùng mã contest: mã contest đoán được, mà kỳ thi
+    thường được đặt tên theo quy luật (2026training01, 02...). Lộ link thì bấm
+    "tạo mã mới" là link cũ chết ngay.
+    """
+    contest = models.OneToOneField(Contest, on_delete=models.CASCADE,
+                                   related_name='hcmus_public_scoreboard',
+                                   verbose_name='kỳ thi')
+    token = models.CharField(max_length=64, unique=True, db_index=True,
+                             default=_new_scoreboard_token, verbose_name='mã liên kết',
+                             help_text='Phần bí mật trong đường dẫn. Đổi mã = link cũ hết dùng được.')
+    is_enabled = models.BooleanField(default=True, verbose_name='bật link công khai',
+                                     help_text='Bỏ tick là link tắt ngay, không cần xoá.')
+    note = models.CharField(max_length=200, blank=True, verbose_name='ghi chú',
+                            help_text='Hiện ngay dưới tên kỳ thi trên trang công khai '
+                                      '(ví dụ: "Kết quả chính thức").')
+    created = models.DateTimeField(auto_now_add=True, verbose_name='tạo lúc')
+
+    class Meta:
+        verbose_name = 'bảng xếp hạng công khai'
+        verbose_name_plural = 'bảng xếp hạng công khai'
+
+    def __str__(self):
+        return f'{self.contest.key} — {"bật" if self.is_enabled else "tắt"}'
+
+    def get_absolute_url(self):
+        return reverse('hcmus_public_scoreboard', args=[self.token])
