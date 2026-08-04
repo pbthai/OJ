@@ -399,13 +399,37 @@ class PermSetAdmin(SortableAdminMixin, admin.ModelAdmin):
     """
     form = PermSetForm
     ordering = ('order',)
-    list_display = ('name', 'label', 'is_role', 'so_quyen', 'gom_tap', 'note_ngan')
+    list_display = ('name', 'label', 'is_role', 'so_quyen', 'thanh_vien', 'gom_tap', 'note_ngan')
     list_filter = ('is_role',)
     search_fields = ('name', 'label')
     fieldsets = (
         (None, {'fields': ('name', 'label', 'is_role', 'note')}),
+        ('Thành viên', {'fields': ('danh_sach_thanh_vien',),
+                        'description': 'Chỉ để xem. Thêm/bớt người trong trang sửa '
+                                       'từng tài khoản (mục "Nhóm") hoặc trong trang Nhóm.'}),
         (_('Contents'), {'fields': ('includes', 'permissions')}),
     )
+    readonly_fields = ('danh_sach_thanh_vien',)
+
+    @admin.display(description='thành viên')
+    def thanh_vien(self, obj):
+        """Số người đang thuộc vai trò này. Khối nguyên tử (is_role=False) không
+        tạo Group nên không có thành viên — hiện '—' chứ không hiện 0 cho khỏi
+        tưởng là vai trò rỗng người."""
+        if not obj.is_role:
+            return '—'
+        return _group_member_qs(obj.group_name()).count()
+
+    @admin.display(description='danh sách thành viên')
+    def danh_sach_thanh_vien(self, obj):
+        if obj is None or not obj.pk:
+            return 'Lưu lại đã.'
+        if not obj.is_role:
+            return 'Đây là khối nguyên tử, không phải vai trò nên không có nhóm và thành viên.'
+        users = list(_group_member_qs(obj.group_name()).order_by('username'))
+        if not users:
+            return 'Chưa có ai trong vai trò này.'
+        return format_html('{} người: {}', len(users), _user_links(users))
 
     @admin.display(description=_('resolved'))
     def so_quyen(self, obj):
@@ -709,3 +733,56 @@ class TeammatePostAdmin(admin.ModelAdmin):
     @admin.display(description=_('user'), ordering='profile__user__username')
     def username(self, obj):
         return obj.profile.user.username
+
+
+# ---------------------------------------------------------------------------
+# Danh sách thành viên của nhóm/vai trò.
+# Django để trang Nhóm chỉ có tên + quyền, không cho biết ai đang ở trong nhóm,
+# nên muốn kiểm "ai đang có quyền ra đề" phải lọc thủ công bên trang Người dùng.
+# ---------------------------------------------------------------------------
+
+def _group_member_qs(group_name):
+    from django.contrib.auth.models import User
+    return User.objects.filter(groups__name=group_name)
+
+
+def _user_links(users, limit=40):
+    """Danh sách username có link sang trang sửa tài khoản."""
+    from django.utils.html import format_html_join
+    shown = users[:limit]
+    html = format_html_join(
+        ', ', '<a href="{}">{}</a>',
+        ((reverse('admin:auth_user_change', args=[u.pk]), u.username) for u in shown))
+    if len(users) > limit:
+        return format_html('{} … và {} người nữa', html, len(users) - limit)
+    return html
+
+
+try:
+    from django.contrib.auth.admin import GroupAdmin as _BaseGroupAdmin
+    from django.contrib.auth.models import Group as _AuthGroup
+
+    class GroupAdmin(_BaseGroupAdmin):
+        """Thêm cột + ô danh sách thành viên vào trang Nhóm có sẵn của Django."""
+        list_display = ('name', 'so_thanh_vien')
+        readonly_fields = ('danh_sach_thanh_vien',)
+        fields = ('name', 'permissions', 'danh_sach_thanh_vien')
+
+        @admin.display(description='số thành viên')
+        def so_thanh_vien(self, obj):
+            return _group_member_qs(obj.name).count()
+
+        @admin.display(description='thành viên')
+        def danh_sach_thanh_vien(self, obj):
+            if obj is None or not obj.pk:
+                return 'Lưu lại đã.'
+            users = list(_group_member_qs(obj.name).order_by('username'))
+            if not users:
+                return 'Chưa có ai trong nhóm này.'
+            return format_html('{} người: {}', len(users), _user_links(users))
+
+    admin.site.unregister(_AuthGroup)
+    admin.site.register(_AuthGroup, GroupAdmin)
+except Exception:   # noqa: BLE001  hỏng chỗ này không được làm sập admin
+    import logging
+    logging.getLogger('hcmus').exception('Không gắn được danh sách thành viên vào GroupAdmin')

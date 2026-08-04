@@ -17,6 +17,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 from django.http import (FileResponse, Http404, HttpResponse,
                          HttpResponseBadRequest, HttpResponseRedirect, JsonResponse)
 from django.middleware.csrf import get_token
@@ -159,10 +160,57 @@ def get_payload(contest, refresh=False):
     return live
 
 
+# =========================================================================
+# PHÂN QUYỀN DÙNG CHUNG cho các trang quản trị của hcmus.
+#
+# LUẬT (chép lại ở docs/10-phan-quyen-hcmus.md, sửa thì sửa cả hai chỗ):
+#
+#   R1. `is_staff` chỉ mở CỬA VÀO trang, KHÔNG quyết định người đó thấy kỳ thi
+#       nào. Mọi danh sách kỳ thi phải đi qua _contests_for(user, ...).
+#   R2. Trang chi tiết / tải file phải lấy kỳ thi TỪ CHÍNH queryset đã lọc
+#       (_contest_or_404), không phải Contest.objects.get rồi mới kiểm.
+#   R3. Không có quyền thì trả 404 chứ không 403: kỳ thi chưa công bố thì ngay
+#       cả việc nó TỒN TẠI cũng không nên lộ.
+#   R4. Nới quyền thì phải hỏi "người này đã đọc được nội dung đó trên web
+#       chưa?". Nếu chưa thì không được mở qua cửa sau (PDF, JSON, resolver).
+#
+# Ai được xem gì:
+#   - superuser / judge.edit_all_contest : mọi kỳ thi.
+#   - author, curator của kỳ thi         : kỳ thi đó.
+#   - tester của kỳ thi                  : kỳ thi đó, CHỈ với đề bài (họ được
+#       mời đọc đề để thử), KHÔNG với resolver.
+#   - còn lại: chỉ kỳ thi đã kết thúc + công khai hoàn toàn + không ẩn đề —
+#       lúc đó đề đã đọc được trên web nên xuất PDF không lộ thêm gì.
+
+
+def _is_contest_admin(user):
+    return user.is_superuser or user.has_perm('judge.edit_all_contest')
+
+
+def _contests_for(user, *, include_testers=False, public_ended_ok=False):
+    """Queryset kỳ thi mà `user` được phép thao tác trong các trang hcmus."""
+    if _is_contest_admin(user):
+        return Contest.objects.all()
+
+    profile = user.profile
+    cond = Q(authors=profile) | Q(curators=profile)
+    if include_testers:
+        cond |= Q(testers=profile)
+    if public_ended_ok:
+        cond |= Q(end_time__lt=timezone.now(), is_visible=True, is_private=False,
+                  is_organization_private=False, hide_problem_statements=False)
+    return Contest.objects.filter(cond).distinct()
+
+
+def _contest_or_404(user, key, **kwargs):
+    """Lấy kỳ thi theo key NHƯNG chỉ trong phạm vi user được phép (xem R2, R3)."""
+    return get_object_or_404(_contests_for(user, **kwargs), key=key)
+
+
 @staff_only
 def resolver_index(request):
     rows = []
-    for c in Contest.objects.order_by('-end_time')[:30]:
+    for c in _contests_for(request.user).order_by('-end_time')[:30]:
         rows.append(
             f'<li><a href="/resolver/{c.key}/">{c.name}</a> '
             f'<span style="color:#888">({c.key}, freeze {c.frozen_last_minutes}′'
@@ -178,19 +226,13 @@ def resolver_index(request):
 
 @staff_only
 def resolver_data(request, contest_key):
-    try:
-        contest = Contest.objects.get(key=contest_key)
-    except Contest.DoesNotExist:
-        raise Http404()
+    contest = _contest_or_404(request.user, contest_key)
     return JsonResponse(get_payload(contest, refresh=request.GET.get('refresh') == '1'))
 
 
 @staff_only
 def resolver(request, contest_key):
-    try:
-        contest = Contest.objects.get(key=contest_key)
-    except Contest.DoesNotExist:
-        raise Http404()
+    contest = _contest_or_404(request.user, contest_key)
     payload = get_payload(contest, refresh=request.GET.get('refresh') == '1')
     with open(os.path.join(BASE, 'resolver.html'), encoding='utf-8') as f:
         html = f.read()
@@ -208,7 +250,7 @@ def statement_index(request):
         return _statement_build(request)
 
     rows = []
-    for c in Contest.objects.order_by('-start_time')[:40]:
+    for c in _statement_contests(request.user).order_by('-start_time')[:40]:
         n = c.contest_problems.count()
         rows.append({
             'key': c.key,
@@ -232,6 +274,11 @@ def statement_index(request):
                                      json.dumps(payload, ensure_ascii=False)))
 
 
+def _statement_contests(user):
+    """Kỳ thi mà `user` được xuất/tải đề bài (xem luật ở đầu mục phân quyền)."""
+    return _contests_for(user, include_testers=True, public_ended_ok=True)
+
+
 def _pdf_cache():
     from hcmus.tasks import cache_dir
     return cache_dir()
@@ -239,8 +286,10 @@ def _pdf_cache():
 
 def _statement_build(request):
     contest_key = (request.POST.get('contest') or '').strip()
-    if not Contest.objects.filter(key=contest_key).exists():
-        return HttpResponseBadRequest('contest không tồn tại')
+    # Kiểm ngay ở đây chứ không chỉ ở lúc tải về: build ghi PDF vào cache dùng
+    # chung, để người không có quyền kích hoạt được là đã sai.
+    if not _statement_contests(request.user).filter(key=contest_key).exists():
+        return HttpResponseBadRequest('contest không tồn tại hoặc bạn không có quyền')
 
     sty_name = request.POST.get('sty') or statement_pdf.DEFAULT_STY
     sty_path = None
@@ -270,8 +319,9 @@ def _statement_build(request):
 
 @staff_only
 def statement_download(request, contest_key):
-    if not Contest.objects.filter(key=contest_key).exists():
-        raise Http404()
+    # Lấy qua queryset đã lọc (R2): file PDF nằm trong cache dùng chung nên nếu
+    # chỉ kiểm "contest có tồn tại không" thì ai cũng tải được đề của người khác.
+    _contest_or_404(request.user, contest_key, include_testers=True, public_ended_ok=True)
     # basename() để key kỳ quái không leo ra khỏi thư mục cache
     path = os.path.join(_pdf_cache(), os.path.basename(f'{contest_key}.pdf'))
     if not os.path.exists(path):
