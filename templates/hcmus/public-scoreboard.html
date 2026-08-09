@@ -12,6 +12,7 @@
             --ps-sub: #555;
             --ps-border: #ddd;
             --ps-ac: #7ee787;
+            --ps-first: #2f9e44;
             --ps-wa: #f0a1a1;
             --ps-pending: #cbb3f0;
             --ps-badge-bg: #e3f0fb;
@@ -24,6 +25,7 @@
             --ps-sub: #ccc;
             --ps-border: #444;
             --ps-ac: #2e7d32;
+            --ps-first: #1b5e20;
             --ps-wa: #8c3b3b;
             --ps-pending: #4a3a75;
             --ps-badge-bg: #16334d;
@@ -37,6 +39,7 @@
                 --ps-sub: #ccc;
                 --ps-border: #444;
                 --ps-ac: #2e7d32;
+                --ps-first: #1b5e20;
                 --ps-wa: #8c3b3b;
                 --ps-pending: #4a3a75;
                 --ps-badge-bg: #16334d;
@@ -63,12 +66,16 @@
         tbody tr:nth-child(2n) td { background-color: var(--ps-zebra); }
         /* Đặt SAU quy tắc kẻ sọc để màu ô không bị nền sọc đè. */
         table.ps td.ps-ac { background-color: var(--ps-ac); }
+        /* Giải đầu tiên của cả kỳ thi cho bài đó: xanh đậm, chữ trắng cho đủ tương phản. */
+        table.ps td.ps-first { background-color: var(--ps-first); color: #fff; }
+        table.ps td.ps-first .ps-cell-bottom { color: #e8f5e9; }
         table.ps td.ps-wa { background-color: var(--ps-wa); }
         table.ps td.ps-pending { background-color: var(--ps-pending); }
         .ps-legend { margin-top: .9em; color: var(--ps-muted); font-size: .9em; }
         .ps-legend span { display: inline-block; padding: .05em .5em;
                           border: 1px solid var(--ps-border); border-radius: 3px;
                           margin-right: .5em; }
+        .ps-legend .ps-first { background: var(--ps-first); color: #fff; }
         .ps-legend .ps-ac { background: var(--ps-ac); }
         .ps-legend .ps-wa { background: var(--ps-wa); }
         .ps-legend .ps-pending { background: var(--ps-pending); }
@@ -128,6 +135,7 @@
         </div>
 
         <p class="ps-legend">
+            <span class="ps-first">Giải đầu tiên</span> đội giải bài đó sớm nhất &middot;
             <span class="ps-ac">Đã giải</span> ô trên là phút giải được, ô dưới là số lần nộp &middot;
             <span class="ps-wa">Chưa giải</span> số lần nộp
             {% if frozen %} &middot; <span class="ps-pending">?</span> nộp trong giờ đóng băng,

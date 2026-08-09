@@ -80,6 +80,9 @@ def build_payload(contest):
                     'solved': final_solved,
                     'tries': int(d.get('tries') or 0),
                     'minutes': int(float(d.get('time') or 0) // 60) if final_solved else None,
+                    # Giây để so ai giải trước: nhiều đội cùng giải trong một phút
+                    # thì so theo phút sẽ ra vài "giải đầu tiên" cùng lúc.
+                    'seconds': float(d.get('time') or 0) if final_solved else None,
                 },
             })
         u = part.user
@@ -745,17 +748,34 @@ def _public_rows(contest):
     payload = build_payload(contest)
     frozen = contest.is_frozen
 
+    # Ô "giải đầu tiên" của mỗi bài: mốc giây nhỏ nhất trong các ô ĐANG HIỆN.
+    # Lúc bảng còn đóng băng thì chỉ xét những ô đã công bố — nếu người giải sớm
+    # nhất nằm trong giờ băng thì chưa được lộ ra qua màu.
+    first_at = {}
+    for team in payload['teams']:
+        for idx, cell in enumerate(team['cells']):
+            if frozen and cell['pending']:
+                continue
+            visible_solved = cell['frozen']['solved'] if frozen else cell['final']['solved']
+            sec = cell['final']['seconds']
+            if visible_solved and sec is not None:
+                if idx not in first_at or sec < first_at[idx]:
+                    first_at[idx] = sec
+
     rows = []
     for team in payload['teams']:
         totals = team['frozen'] if frozen else team['final']
         cells = []
-        for cell in team['cells']:
+        for idx, cell in enumerate(team['cells']):
             if frozen and cell['pending']:
                 cells.append({'state': 'pending', 'top': '?',
                               'bottom': cell['final']['tries'] or ''})
             elif (frozen and cell['frozen']['solved']) or (not frozen and cell['final']['solved']):
                 tries = cell['frozen']['tries'] if frozen else cell['final']['tries']
-                cells.append({'state': 'ac', 'top': cell['final']['minutes'],
+                sec = cell['final']['seconds']
+                is_first = sec is not None and first_at.get(idx) == sec
+                cells.append({'state': 'first' if is_first else 'ac',
+                              'top': cell['final']['minutes'],
                               'bottom': f'{tries} lần' if tries else ''})
             else:
                 tries = cell['frozen']['tries'] if frozen else cell['final']['tries']
