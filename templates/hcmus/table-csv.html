@@ -1,0 +1,45 @@
+{# Nút tải CSV dùng chung cho các bảng (bảng vàng, bảng điểm).
+
+   Xuất từ DOM chứ không gọi lại server: các bộ lọc trên những trang này đều chạy
+   phía trình duyệt (ẩn <tr>), nên lấy đúng những dòng ĐANG HIỆN là khớp với thứ
+   người dùng nhìn thấy, kể cả sau khi lọc. Gọi lại server sẽ phải bê nguyên logic
+   lọc sang phía kia và rất dễ lệch.
+
+   Dùng: {% include "hcmus/table-csv.html" %} rồi
+         <button onclick="hcmusTableCsv('id-cua-bang', 'ten-file')">Tải CSV</button>
+#}
+<script type="text/javascript">
+    function hcmusTableCsv(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var lines = [];
+        Array.prototype.forEach.call(table.querySelectorAll('tr'), function (tr) {
+            // Bỏ qua dòng đang bị bộ lọc ẩn. Kiểm cả tổ tiên: có trang ẩn cả nhóm.
+            for (var el = tr; el && el !== document.body; el = el.parentElement) {
+                if (getComputedStyle(el).display === 'none') return;
+            }
+            var cells = [];
+            Array.prototype.forEach.call(tr.querySelectorAll('th, td'), function (cell) {
+                // innerText gộp cả hai dòng trong ô bảng điểm (phút + số lần nộp)
+                // thành một chuỗi; nén khoảng trắng cho gọn một ô CSV.
+                var text = (cell.innerText || '').replace(/\s+/g, ' ').trim();
+                cells.push('"' + text.replace(/"/g, '""') + '"');
+            });
+            if (cells.length) lines.push(cells.join(','));
+        });
+        if (!lines.length) return;
+        // ﻿ (BOM) để Excel trên Windows mở ra đúng tiếng Việt thay vì ô vuông.
+        var blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'],
+                            {type: 'text/csv;charset=utf-8;'});
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (filename || 'bang') + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+</script>
+<style>
+    .csv-btn { font-size: .9em; padding: .25em .8em; }
+</style>

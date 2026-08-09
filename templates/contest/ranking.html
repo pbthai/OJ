@@ -472,6 +472,16 @@ $('#show-personal-info-checkbox').click(function () {
             <label for="show-virtual-participations-checkbox" style="vertical-align: bottom">{{ _('Show virtual participations') }}</label>
             {% if not is_ICPC_format %}
             <a href="#" onclick="download_table_as_csv()" style="float: right;">{{ _('Download as CSV') }}</a>
+            {% else %}
+            {# FIT-HCMUS: bản gốc ẩn nút này với format ICPC vì hàm cũ bỏ mất
+               .solving-time — mà với ICPC thì phút giải được chính là thông tin
+               quan trọng nhất. Dùng bộ xuất theo DOM: lấy đúng những dòng đang
+               hiện nên lọc theo tổ chức xong tải vẫn khớp, và giữ nguyên nội dung
+               ô (phút + số lần nộp). #}
+            {% include "hcmus/table-csv.html" %}
+            <a href="#" style="float: right;"
+               onclick="hcmusTableCsv('ranking-table', 'bang-xep-hang-{{ contest.key }}'); return false;">
+                {{ _('Download as CSV') }}</a>
             {% endif %}
         {% endif %}
     </div>

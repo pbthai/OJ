@@ -102,8 +102,15 @@
     {% if not rows %}
         <p>Chưa có đội nào dự thi.</p>
     {% else %}
+        {% include "hcmus/table-csv.html" %}
+        <p style="margin: 0 0 .6em">
+            <button type="button" class="button csv-btn"
+                    onclick="hcmusTableCsv('ps-table', '{{ contest.key }}-bang-diem')">
+                Tải CSV
+            </button>
+        </p>
         <div class="ps-wrap">
-            <table class="ps">
+            <table class="ps" id="ps-table">
                 <thead>
                     <tr>
                         <th>Hạng</th>

@@ -30,8 +30,11 @@
         {% endif %}
     </p>
 
-    {% if filter_orgs %}
-        <div class="rk-filter" style="margin: 10px 0;">
+    {% include "hcmus/table-csv.html" %}
+
+    <div class="rk-filter" style="margin: 10px 0; display: flex; align-items: center;
+                                  gap: .8em; flex-wrap: wrap;">
+        {% if filter_orgs %}
             <label>{{ _('Filter by organization') }}:
                 <select id="rk-org-filter">
                     <option value="">{{ _('All') }}</option>
@@ -40,9 +43,14 @@
                     {% endfor %}
                 </select>
             </label>
-            <span id="rk-filter-count" class="rk-pen" style="margin-left: 8px;"></span>
-        </div>
-    {% endif %}
+            <span id="rk-filter-count" class="rk-pen"></span>
+        {% endif %}
+        {# Xuất đúng những dòng đang hiện, nên lọc tổ chức xong tải vẫn khớp. #}
+        <button type="button" class="button csv-btn"
+                onclick="hcmusTableCsv('rk-table', '{{ ranking.slug }}')">
+            {{ _('Download CSV') }}
+        </button>
+    </div>
 
     {% include "hcmus/ranking-table.html" %}
 
