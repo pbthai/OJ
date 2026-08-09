@@ -498,7 +498,7 @@ def accounts_page(request):
     import zipfile
 
     from hcmus import accounts as acc
-    from hcmus import slips
+    from hcmus import badges, slips
 
     mode = request.POST.get('mode', 'create')
     if mode not in ('create', 'reset', 'slips'):
@@ -572,12 +572,35 @@ def accounts_page(request):
         pdf_bytes = None
         csv_text += f'\n# Không tạo được PDF phiếu: {e}\n'
 
+    # Tên kỳ thi in trên thẻ đeo và bảng tên: lấy ô "kỳ thi" của form, không có
+    # thì lấy tiêu đề phiếu.
+    event_name = (request.POST.get('slip_contest', '').strip()
+                  or request.POST.get('slip_title', '').strip()
+                  or 'FIT-HCMUS Online Judge')
+    try:
+        badge_copies = int(request.POST.get('badge_copies') or 3)
+    except ValueError:
+        badge_copies = 3
+    try:
+        badge_bytes = badges.make_badges_pdf(results, event=event_name, copies=badge_copies)
+        tent_bytes = badges.make_tents_pdf(results, event=event_name)
+    except Exception as e:  # noqa: BLE001
+        badge_bytes = tent_bytes = None
+        csv_text += f'\n# Không tạo được thẻ đeo / bảng tên: {e}\n'
+
     changed = sum(1 for r in results if r['password'])
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('tai-khoan.csv', csv_text.encode('utf-8'))
         if pdf_bytes:
             z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
+        # Thẻ đeo + bảng tên để bàn dùng chung nguồn dữ liệu với phiếu, nên gói
+        # luôn để ban tổ chức chỉ phải tải một lần. Hai thứ này chỉ cần tên đội
+        # nên chế độ chỉ-in-phiếu (không đụng mật khẩu) vẫn có.
+        if badge_bytes:
+            z.writestr('the-deo-ten.pdf', badge_bytes)
+        if tent_bytes:
+            z.writestr('bang-ten-ban.pdf', tent_bytes)
         if contest_note:
             z.writestr('cap-quyen-contest.txt', contest_note.encode('utf-8'))
     buf.seek(0)

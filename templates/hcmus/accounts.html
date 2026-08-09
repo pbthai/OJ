@@ -120,9 +120,17 @@
                 <input type="text" name="slip_contest" placeholder="2026 Training Camp #01"></div>
             <div class="ta-row"><label>Địa chỉ đăng nhập</label>
                 <input type="text" name="slip_url" value="{{ default_url }}"></div>
+            <div class="ta-row"><label>Thẻ đeo mỗi đội</label>
+                <input type="number" name="badge_copies" value="3" min="1" max="10"
+                       style="width:5em"></div>
+            <p class="ta-note" style="margin:.4em 0 0">
+                Gói tải về có thêm <b>the-deo-ten.pdf</b> (bìa đeo 10×7,5 cm, cắt theo
+                viền đứt) và <b>bang-ten-ban.pdf</b> (A4 ngang, gấp đôi thành bảng tên
+                dựng trên bàn — hai mặt đều đọc được). Tên kỳ thi lấy từ ô "Dòng phụ".
+            </p>
         </div>
 
-        <button type="submit" class="button ta-go">Chạy &amp; tải về (CSV + PDF phiếu)</button>
+        <button type="submit" class="button ta-go">Chạy &amp; tải về (CSV + phiếu + thẻ đeo + bảng tên)</button>
         <p class="ta-note">Bấm xong hệ thống chạy trên server rồi trả về một file ZIP gồm
             <code>tai-khoan.csv</code> (kèm mật khẩu mới + trạng thái từng dòng) và
             <code>phieu-dang-nhap.pdf</code> (2 cột × 4 phiếu/trang A4, có viền cắt).</p>
