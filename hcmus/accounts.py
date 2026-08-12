@@ -141,6 +141,45 @@ def resolve_email(email, username, email_domain=''):
     return ''
 
 
+# --- Email khoa -> giảng viên --------------------------------------------
+# Hộp thư @fit.hcmus.edu.vn do trường cấp và chỉ cấp cho người của Khoa, nên nắm
+# được hộp thư đó là bằng chứng đủ để nhận quyền giảng viên. Không cần ai duyệt tay.
+#
+# ĐIỀU KIỆN: chỉ cấp khi đã chứng minh là CHỦ hộp thư — người dùng tự đăng ký rồi
+# bấm link trong thư, hoặc tài khoản tạo hàng loạt có gửi thư kích hoạt (mật khẩu
+# để trống, đường vào duy nhất là link trong hộp thư đó). Gõ email của người khác
+# vào ô rồi tự đặt mật khẩu thì KHÔNG được cấp, nếu không thì bất kỳ nhân viên nào
+# cũng tự nâng mình lên giảng viên bằng cách gõ email của một thầy trong khoa.
+FACULTY_EMAIL_DOMAIN = 'fit.hcmus.edu.vn'
+FACULTY_GROUP = 'giangvien'
+
+
+def is_faculty_email(email):
+    """Email của Khoa? So khớp cả '@' để 'a@gia-fit.hcmus.edu.vn' không lọt."""
+    return (email or '').strip().lower().endswith('@' + FACULTY_EMAIL_DOMAIN)
+
+
+def promote_faculty(user):
+    """Email Khoa -> nhân viên + nhóm giangvien. Trả về True nếu có thay đổi.
+
+    Gọi được nhiều lần, lần sau không làm gì thêm. Không bao giờ đụng tới
+    is_superuser: quyền đó chỉ cấp tay.
+    """
+    from django.contrib.auth.models import Group
+    if not is_faculty_email(user.email):
+        return False
+    changed = False
+    if not user.is_staff:
+        user.is_staff = True
+        user.save(update_fields=['is_staff'])
+        changed = True
+    group = Group.objects.filter(name=FACULTY_GROUP).first()
+    if group is not None and not user.groups.filter(pk=group.pk).exists():
+        user.groups.add(group)
+        changed = True
+    return changed
+
+
 def rows_without_email(rows, email_domain=''):
     """Các dòng không thể gửi mail kích hoạt: không có email và cũng không phải mã
     sinh viên. Dùng để CHẶN TRƯỚC cả mẻ thay vì tạo được một nửa rồi mới báo."""
@@ -387,6 +426,23 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                     if groups:
                         user.groups.add(*groups)
                         status += ' +quyền:' + ','.join(g.name for g in groups)
+                    # Email Khoa -> giảng viên, nhưng chỉ khi mật khẩu bỏ trống và
+                    # có gửi thư: lúc đó đường vào duy nhất là link trong hộp thư
+                    # đó. Xem promote_faculty.
+                    if is_faculty_email(email):
+                        if send_activation and not row['password']:
+                            user.set_unusable_password()
+                            user.save(update_fields=['password'])
+                            # Mật khẩu sinh tự động không còn dùng được nữa, đừng
+                            # in nó lên phiếu để khỏi ai ngồi gõ một chuỗi đã chết.
+                            password = ''
+                            if promote_faculty(user):
+                                status += ' +giảng viên'
+                        else:
+                            status += ' (email Khoa nhưng CHƯA cấp quyền giảng viên: '
+                            status += ('phải để trống cột password' if send_activation
+                                       else 'phải tích gửi thư kích hoạt')
+                            status += ')'
                     if send_activation and email:
                         to_notify.append(user)
                 else:  # reset: chỉ đổi mật khẩu, không đụng gì khác
