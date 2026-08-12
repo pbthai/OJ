@@ -454,6 +454,20 @@ def _may_manage_accounts(user):
     return user.is_active and (user.has_perm('auth.add_user') or user.has_perm('auth.change_user'))
 
 
+def _grantable_groups(user):
+    """Các nhóm quyền mà `user` được phép gán cho tài khoản mới.
+
+    Luật: KHÔNG ai cấp được thứ mình không có. Superuser thấy hết; người khác chỉ
+    thấy đúng những nhóm chính họ đang thuộc. Nếu không giới hạn, một giảng viên
+    có quyền tạo tài khoản sẽ tự tạo được một tài khoản khác rồi cấp cho nó nhóm
+    cao hơn mình — đường vòng để leo quyền.
+    """
+    from django.contrib.auth.models import Group
+    if user.is_superuser:
+        return list(Group.objects.order_by('name'))
+    return list(user.groups.order_by('name'))
+
+
 def _eligible_contests(user):
     """Contest để tích chọn cấp quyền vào: sắp mở / đang chạy / vừa xong, và người
     dùng có quyền sửa. Trả về list dict cho template."""
@@ -489,6 +503,7 @@ def accounts_page(request):
         'can_reset': request.user.has_perm('auth.change_user'),
         'default_url': request.build_absolute_uri('/').rstrip('/'),
         'contests': _eligible_contests(request.user),
+        'grantable_groups': _grantable_groups(request.user),
     }
 
     if request.method != 'POST':
@@ -535,12 +550,26 @@ def accounts_page(request):
         for r in results:
             r['status'] = 'chỉ in phiếu'
     else:
-        results = acc.run_batch(
-            text, mode,
-            org_slug=request.POST.get('org', '').strip(),
-            display_name=bool(request.POST.get('display_name')),
-            email_domain=request.POST.get('email_domain', '').strip(),
-        )
+        # Chỉ nhận những nhóm mà CHÍNH người này được phép cấp — không tin POST.
+        allowed = {g.name: g for g in _grantable_groups(request.user)}
+        chosen = [allowed[n] for n in request.POST.getlist('groups') if n in allowed]
+        send_activation = request.POST.get('send_activation') == 'on'
+        try:
+            results = acc.run_batch(
+                text, mode,
+                org_slug=request.POST.get('org', '').strip(),
+                display_name=bool(request.POST.get('display_name')),
+                email_domain=request.POST.get('email_domain', '').strip(),
+                send_activation=send_activation,
+                base_url=ctx['default_url'],
+                groups=chosen,
+            )
+        except ValueError as e:
+            # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Hiện thành cảnh
+            # báo trên trang, giữ nguyên nội dung người dùng đã dán để họ sửa.
+            ctx['error'] = str(e)
+            ctx['keep_text'] = text
+            return render(request, 'hcmus/accounts.html', ctx)
     if not results:
         ctx['error'] = _('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
         return render(request, 'hcmus/accounts.html', ctx)

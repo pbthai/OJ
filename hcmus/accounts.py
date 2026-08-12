@@ -16,6 +16,7 @@ Chỉ đọc/ghi bảng tài khoản (User/Profile/Organization). KHÔNG đụng
 scoreboard, điểm hay rating — đổi mật khẩu không làm thay đổi xếp hạng.
 """
 import csv
+import re
 import io
 import secrets
 
@@ -94,24 +95,113 @@ def _school_org(name, cache):
     return org
 
 
-def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
+# --- Mã sinh viên -> email + tổ chức -------------------------------------
+# Mã sinh viên HCMUS là 8 chữ số (kiểm trên dữ liệu thật: 24120438, 24120040...),
+# email trường cấp là <mã>@student.hcmus.edu.vn. Giảng viên KHÔNG có mẫu nào đoán
+# được nên bắt buộc phải nhập email tay — đó là lý do hàm này chỉ nhận toàn số.
+STUDENT_ID_RE = re.compile(r'^\d{8}$')
+STUDENT_EMAIL_DOMAIN = 'student.hcmus.edu.vn'
+STUDENT_ORG_SLUG = 'hcmus'
+
+
+def is_student_id(username):
+    return bool(STUDENT_ID_RE.match((username or '').strip()))
+
+
+def resolve_email(email, username, email_domain=''):
+    """Email dùng cho tài khoản: ưu tiên cột email, rồi tới mã sinh viên, rồi domain
+    do người chạy nhập. Trả về '' nếu không suy ra được."""
+    email = (email or '').strip()
+    if email:
+        return email
+    if is_student_id(username):
+        return f'{username}@{STUDENT_EMAIL_DOMAIN}'
+    if email_domain:
+        return f'{username}@{email_domain}'
+    return ''
+
+
+def rows_without_email(rows, email_domain=''):
+    """Các dòng không thể gửi mail kích hoạt: không có email và cũng không phải mã
+    sinh viên. Dùng để CHẶN TRƯỚC cả mẻ thay vì tạo được một nửa rồi mới báo."""
+    return [r['username'] for r in rows
+            if not resolve_email(r['email'], r['username'], email_domain)]
+
+
+def activation_link(user, base_url):
+    """Link để người dùng tự đặt mật khẩu.
+
+    Thực chất là link đặt lại mật khẩu của Django, nhưng thư gửi đi gọi là 'kích
+    hoạt tài khoản' cho người nhận dễ hiểu. Hạn dùng theo PASSWORD_RESET_TIMEOUT
+    (mặc định 3 ngày) và tự hết hiệu lực ngay khi người dùng đặt xong mật khẩu.
+    """
+    from django.contrib.auth.tokens import default_token_generator
+    from django.urls import reverse
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    return base_url.rstrip('/') + reverse('password_reset_confirm',
+                                          kwargs={'uidb64': uid, 'token': token})
+
+
+def send_activation_mail(user, base_url, site_name='FIT-HCMUS Online Judge'):
+    """Gửi thư kích hoạt. Trả về True nếu gửi được."""
+    from django.conf import settings
+    from django.core.mail import send_mail
+    link = activation_link(user, base_url)
+    who = user.first_name or user.username
+    body = (
+        f'Chào {who},\n\n'
+        f'Tài khoản của bạn trên {site_name} đã được tạo:\n\n'
+        f'    Tên đăng nhập: {user.username}\n\n'
+        'Bấm vào liên kết dưới đây để kích hoạt tài khoản và tự đặt mật khẩu:\n\n'
+        f'    {link}\n\n'
+        'Liên kết có hạn 3 ngày. Nếu hết hạn, vào trang đăng nhập và bấm "Quên mật khẩu" '
+        'để nhận liên kết mới.\n\n'
+        f'Nếu bạn không yêu cầu tài khoản này, hãy bỏ qua thư.\n\n'
+        f'{site_name}\n{base_url}\n'
+    )
+    send_mail(subject=f'Kích hoạt tài khoản {site_name}',
+              message=body, from_email=settings.DEFAULT_FROM_EMAIL,
+              recipient_list=[user.email], fail_silently=False)
+    return True
+
+
+def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
+              send_activation=False, base_url='', groups=()):
     """Chạy một mẻ tạo/đổi mật khẩu. Trả về list dict kết quả, mỗi dòng có thêm
-    'status' (và 'password' = mật khẩu mới, rỗng nếu dòng bị bỏ qua)."""
+    'status' (và 'password' = mật khẩu mới, rỗng nếu dòng bị bỏ qua).
+
+    send_activation: gửi thư để người dùng tự đặt mật khẩu (xem send_activation_mail).
+      Bật thì mọi dòng PHẢI suy ra được email, nếu không cả mẻ bị chặn từ đầu —
+      tạo được một nửa rồi mới báo lỗi thì dọn rất mệt.
+    groups: các Group gán cho tài khoản MỚI TẠO. Không đụng nhóm của tài khoản đã
+      có sẵn: đổi ID cho ai đó không phải là cớ để nâng quyền họ.
+    """
     from judge.models import Language, Organization, Profile
     if mode not in ('create', 'reset'):
         raise ValueError('mode phải là create hoặc reset')
 
     rows = parse_rows(text)
+    if send_activation and mode == 'create':
+        thieu = rows_without_email(rows, email_domain)
+        if thieu:
+            raise ValueError(
+                'Đã tích "gửi email kích hoạt" nhưng {} dòng không có email và cũng '
+                'không phải mã sinh viên (8 chữ số): {}. Giảng viên không đoán được '
+                'email từ tên đăng nhập nên phải nhập tay. Chưa tạo tài khoản nào.'
+                .format(len(thieu), ', '.join(thieu[:10]) + ('...' if len(thieu) > 10 else '')))
     extra_org = Organization.objects.filter(slug=org_slug).first() if org_slug else None
     lang = Language.get_default_language()
     org_cache = {}
     results = []
+    to_notify = []          # tài khoản mới tạo / vừa đổi tên -> gửi thư kích hoạt
 
     for row in rows:
         username = row['username']
-        name, school, email, room = row['name'], row['school'], row['email'], row['room']
-        if not email and email_domain:
-            email = f'{username}@{email_domain}'
+        name, school, room = row['name'], row['school'], row['room']
+        email = resolve_email(row['email'], username, email_domain)
         password = row['password'] or gen_pass()
         skip = dict(row, password='', status='')
         try:
@@ -124,6 +214,32 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
                     continue
 
                 if mode == 'create':
+                    # Email là danh tính thật của người dùng, tên đăng nhập chỉ là
+                    # nhãn. Nên nếu email đã có trong hệ thống thì KHÔNG tạo tài
+                    # khoản thứ hai: hoặc bỏ qua (đã đúng tên), hoặc đổi tên đăng
+                    # nhập của tài khoản cũ sang tên mới.
+                    by_email = (User.objects.filter(email__iexact=email).first()
+                                if email else None)
+                    if by_email is not None:
+                        if by_email.is_staff or by_email.is_superuser:
+                            results.append({**skip, 'status': 'BỎ QUA: email thuộc tài khoản quản trị'})
+                            continue
+                        if by_email.username == username:
+                            results.append({**skip, 'status': 'ĐÃ ĐÚNG (email + tên trùng) - bỏ qua'})
+                            continue
+                        if user is not None:
+                            results.append({**skip, 'status':
+                                            f'LỖI: tên "{username}" đã thuộc tài khoản khác'})
+                            continue
+                        cu = by_email.username
+                        by_email.username = username
+                        by_email.save(update_fields=['username'])
+                        to_notify.append(by_email)
+                        results.append({'username': username, 'password': '', 'name': name,
+                                        'school': school, 'email': email, 'room': room,
+                                        'status': f'ĐỔI TÊN: {cu} -> {username}'})
+                        continue
+
                     if user:
                         results.append({**skip, 'status': 'ĐÃ TỒN TẠI - bỏ qua'})
                         continue
@@ -145,6 +261,17 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
                     if extra_org is not None:
                         profile.organizations.add(extra_org)
                         status += f' +{extra_org.slug}'
+                    # Mã sinh viên thì chắc chắn là người của trường.
+                    if is_student_id(username):
+                        org = Organization.objects.filter(slug=STUDENT_ORG_SLUG).first()
+                        if org is not None and not profile.organizations.filter(pk=org.pk).exists():
+                            profile.organizations.add(org)
+                            status += f' +{org.slug}'
+                    if groups:
+                        user.groups.add(*groups)
+                        status += ' +quyền:' + ','.join(g.name for g in groups)
+                    if send_activation and email:
+                        to_notify.append(user)
                 else:  # reset: chỉ đổi mật khẩu, không đụng gì khác
                     if not user:
                         results.append({**skip, 'status': 'KHÔNG TỒN TẠI - bỏ qua'})
@@ -163,6 +290,20 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain=''):
                                 'school': school, 'email': email, 'room': room, 'status': status})
         except Exception as e:  # noqa: BLE001  một dòng hỏng không được làm sập cả mẻ
             results.append({**skip, 'status': f'LỖI: {e}'})
+
+    # Gửi thư SAU khi đã ghi xong DB: SMTP chậm và có thể lỗi, không nên giữ
+    # transaction mở trong lúc chờ mạng. Thư hỏng thì ghi vào status của dòng đó,
+    # tài khoản vẫn còn nguyên để gửi lại sau.
+    if send_activation and to_notify:
+        by_name = {r['username']: r for r in results}
+        for u in to_notify:
+            try:
+                send_activation_mail(u, base_url or 'https://coding.fit.hcmus.edu.vn')
+                if u.username in by_name:
+                    by_name[u.username]['status'] += ' +đã gửi mail'
+            except Exception as e:  # noqa: BLE001
+                if u.username in by_name:
+                    by_name[u.username]['status'] += f' | LỖI GỬI MAIL: {e}'
 
     return results
 

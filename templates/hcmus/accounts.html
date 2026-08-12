@@ -113,6 +113,38 @@
         </details>
 
         <div class="ta-card">
+            <h3>Kích hoạt &amp; quyền</h3>
+            <div class="ta-row" style="align-items:flex-start">
+                <label><input type="checkbox" name="send_activation" checked> Gửi email kích hoạt</label>
+            </div>
+            <p class="ta-note" style="margin:.2em 0 .8em">
+                Người dùng nhận thư kèm liên kết để <b>tự đặt mật khẩu</b> (liên kết có hạn 3 ngày).
+                Thiếu cột email thì hệ thống tự suy từ <b>mã sinh viên</b> (8 chữ số →
+                <code>&lt;mã&gt;@student.hcmus.edu.vn</code>) và tự thêm vào tổ chức HCMUS.
+                Dòng nào không có email và cũng không phải mã sinh viên thì
+                <b>cả mẻ bị dừng</b> để bạn sửa — giảng viên phải nhập email tay.
+                Email trùng với tài khoản cũ thì hệ thống <b>đổi tên đăng nhập</b> của tài
+                khoản đó thay vì tạo thêm tài khoản mới.
+            </p>
+            {% if grantable_groups %}
+                <div class="ta-row" style="align-items:flex-start">
+                    <label>Quyền cho tài khoản mới</label>
+                    <div>
+                        {% for g in grantable_groups %}
+                            <label style="display:inline-block; margin:0 1em .3em 0">
+                                <input type="checkbox" name="groups" value="{{ g.name }}"> {{ g.name }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <p class="ta-note" style="margin:.2em 0 0">
+                    Không tích gì = tài khoản thường. Danh sách chỉ gồm các nhóm
+                    <b>bạn đang thuộc</b>, vì không ai cấp được quyền mình không có.
+                </p>
+            {% endif %}
+        </div>
+
+        <div class="ta-card">
             <h3>Phiếu đăng nhập (PDF)</h3>
             <div class="ta-row"><label>Tiêu đề</label>
                 <input type="text" name="slip_title" placeholder="FIT-HCMUS Online Judge"></div>
