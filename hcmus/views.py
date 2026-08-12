@@ -29,7 +29,8 @@ from django.views.decorators.http import require_POST
 
 from hcmus import statement_pdf
 from hcmus.health import snapshot as health_snapshot
-from hcmus.models import JudgeSwitch, PublicScoreboard, Ranking, TeammatePost
+from hcmus.models import (JudgeSwitch, LandingPage, PublicScoreboard, Ranking,
+                          TeammatePost)
 from hcmus.ranking import compute as compute_ranking
 from hcmus.tasks import build_contest_statement
 from judge.models import Contest, ContestParticipation
@@ -885,3 +886,20 @@ def public_scoreboard(request, token):
         'frozen': data['frozen'],
         'running': contest.start_time <= now < contest.end_time,
     })
+
+
+# ------------------------------------------------- trang giới thiệu tĩnh
+
+def landing_page(request, slug):
+    """Trang HTML do biên tập viên soạn (xem model LandingPage).
+
+    Đặt CUỐI danh sách URL của hcmus, mà hcmus lại được nối cuối urlpatterns gốc,
+    nên chỉ bắt những đường dẫn không khớp trang nào khác — không che mất URL sẵn có.
+    """
+    page = get_object_or_404(LandingPage, slug=slug, is_visible=True)
+    if page.login_required and not request.user.is_authenticated:
+        return HttpResponseRedirect(f"{reverse('auth_login')}?next={page.get_absolute_url()}")
+    if page.is_full_document:
+        # File trọn vẹn tải lên: trả nguyên văn, không nhét vào khung site.
+        return HttpResponse(page.html)
+    return render(request, 'hcmus/landing.html', {'title': page.title, 'page': page})

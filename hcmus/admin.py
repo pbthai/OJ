@@ -19,7 +19,8 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from hcmus.models import (CalendarEvent, ContestPrinter, HomeSection, JudgeSwitch, PermSet,
                           Printer, PrintRequest, Ranking, RankingContest, SidebarSection,
-                          PublicScoreboard, TeammatePost, TeamRoom, UserScore)
+                          LandingPage, PublicScoreboard, TeammatePost, TeamRoom,
+                          UserScore)
 from judge.models import Profile
 from judge.widgets import (AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget,
                            AdminMartorWidget)
@@ -786,3 +787,51 @@ try:
 except Exception:   # noqa: BLE001  hỏng chỗ này không được làm sập admin
     import logging
     logging.getLogger('hcmus').exception('Không gắn được danh sách thành viên vào GroupAdmin')
+
+
+class LandingPageForm(ModelForm):
+    """Thêm ô tải file .html: dán HTML vào ô text thì tiện sửa vặt, còn tải file
+    thì tiện khi trang được thiết kế sẵn ở chỗ khác."""
+    upload = forms.FileField(required=False, label='tải lên file .html',
+                             help_text='Chọn file để THAY nội dung bên trên. '
+                                       'Bỏ trống thì giữ nguyên nội dung đang có.')
+
+    class Meta:
+        model = LandingPage
+        fields = '__all__'
+
+    def clean(self):
+        data = super().clean()
+        f = data.get('upload')
+        if f is not None:
+            if f.size > 2 * 1024 * 1024:
+                raise forms.ValidationError('File lớn hơn 2 MB.')
+            raw = f.read()
+            try:
+                data['html'] = raw.decode('utf-8')
+            except UnicodeDecodeError:
+                raise forms.ValidationError('File phải là văn bản mã UTF-8.')
+        elif not (data.get('html') or '').strip():
+            raise forms.ValidationError('Phải có nội dung: dán HTML hoặc tải file lên.')
+        return data
+
+
+@admin.register(LandingPage)
+class LandingPageAdmin(admin.ModelAdmin):
+    """Trang giới thiệu tĩnh. Giao cho nhóm biên tập trang chủ."""
+    form = LandingPageForm
+    list_display = ('slug', 'title', 'is_visible', 'login_required', 'xem_thu', 'modified')
+    list_filter = ('is_visible',)
+    search_fields = ('slug', 'title')
+    fieldsets = (
+        (None, {'fields': ('slug', 'title', ('is_visible', 'login_required'))}),
+        ('Nội dung', {'fields': ('upload', 'html'),
+                      'description': 'File có thẻ &lt;html&gt; sẽ được phục vụ nguyên văn; '
+                                     'đoạn HTML rời thì nhúng vào khung giao diện của site.'}),
+    )
+
+    @admin.display(description='xem thử')
+    def xem_thu(self, obj):
+        if not obj.pk:
+            return '—'
+        return format_html('<a href="{}" target="_blank">/{}/</a>', obj.get_absolute_url(), obj.slug)

@@ -971,3 +971,43 @@ class PublicScoreboard(models.Model):
 
     def get_absolute_url(self):
         return reverse('hcmus_public_scoreboard', args=[self.token])
+
+
+class LandingPage(models.Model):
+    """Một trang HTML tĩnh do người biên tập trang chủ tự soạn hoặc tải lên.
+
+    Dùng cho các trang giới thiệu kỳ thi (vd /pretest). Nội dung là HTML THÔ, cố ý
+    không lọc: người sửa được trang này là biên tập viên đã được tin cậy, và lọc
+    thì hỏng hết bố cục của file họ tải lên. Đổi lại, quyền sửa phải giữ hẹp —
+    xem docs/10-phan-quyen-hcmus.md.
+
+    Nếu HTML có thẻ <html> thì phục vụ nguyên văn (file trọn vẹn tải lên); không
+    thì nhúng vào khung giao diện của site để có thanh điều hướng và chủ đề sáng/tối.
+    """
+    slug = models.SlugField(max_length=64, unique=True, verbose_name='đường dẫn',
+                            help_text='Địa chỉ trang: /&lt;đường dẫn&gt;/ — ví dụ "pretest".')
+    title = models.CharField(max_length=150, verbose_name='tiêu đề',
+                             help_text='Hiện trên thanh tiêu đề trình duyệt và ở liên kết.')
+    html = models.TextField(blank=True, verbose_name='nội dung HTML',
+                            help_text='Dán HTML vào đây, hoặc dùng ô "tải lên" bên dưới.')
+    is_visible = models.BooleanField(default=False, verbose_name='cho xem',
+                                     help_text='Bỏ tick là trang trả 404, không cần xoá.')
+    login_required = models.BooleanField(default=False, verbose_name='phải đăng nhập mới xem')
+    modified = models.DateTimeField(auto_now=True, verbose_name='sửa lần cuối')
+
+    class Meta:
+        verbose_name = 'trang giới thiệu'
+        verbose_name_plural = 'trang giới thiệu'
+        ordering = ['slug']
+
+    def __str__(self):
+        return f'/{self.slug}/ — {self.title}'
+
+    def get_absolute_url(self):
+        return reverse('hcmus_landing', args=[self.slug])
+
+    @property
+    def is_full_document(self):
+        """File tải lên có phải một trang HTML trọn vẹn không."""
+        head = self.html[:2000].lower()
+        return '<html' in head or '<!doctype html' in head

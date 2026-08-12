@@ -28,4 +28,7 @@ urlpatterns = [
     path('tim-teammate/trang-thai/', views.teammate_status, name='hcmus_teammate_status'),
     path('tim-teammate/xoa/<int:pk>/', views.teammate_delete, name='hcmus_teammate_delete'),
     path('in-bai/<int:submission>/', views.print_submission, name='hcmus_print_submission'),
+    # ĐẶT CUỐI CÙNG: bắt mọi đường dẫn một cấp còn lại (vd /pretest/). Phải nằm sau
+    # tất cả URL khác, nếu không nó nuốt mất các trang bên trên.
+    path('<slug:slug>/', views.landing_page, name='hcmus_landing'),
 ]

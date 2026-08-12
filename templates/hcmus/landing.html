@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{# Trang giới thiệu do biên tập viên soạn (hcmus.LandingPage). Nội dung là HTML
+   THÔ, cố ý không lọc — chỉ người có quyền sửa trang chủ mới soạn được. #}
+{% block body %}
+    <div class="content-description">
+        {{ page.html|safe }}
+    </div>
+{% endblock %}
