@@ -153,10 +153,15 @@
                 Email trùng với tài khoản cũ thì hệ thống <b>đổi tên đăng nhập</b> của tài
                 khoản đó thay vì tạo thêm tài khoản mới.
             </p>
-            {% if grantable_groups %}
+            {% if grantable_groups or may_edit_accounts %}
                 <div class="ta-row" style="align-items:flex-start">
                     <label>Quyền cho tài khoản mới</label>
                     <div>
+                        {% if may_edit_accounts %}
+                            <label style="display:inline-block; margin:0 1em .3em 0">
+                                <input type="checkbox" name="make_staff"> <b>Tình trạng nhân viên</b>
+                            </label>
+                        {% endif %}
                         {% for g in grantable_groups %}
                             <label style="display:inline-block; margin:0 1em .3em 0">
                                 <input type="checkbox" name="groups" value="{{ g.name }}"> {{ g.name }}
@@ -167,6 +172,9 @@
                 <p class="ta-note" style="margin:.2em 0 0">
                     Không tích gì = tài khoản thường. Danh sách chỉ gồm các nhóm
                     <b>bạn đang thuộc</b>, vì không ai cấp được quyền mình không có.
+                    {% if may_edit_accounts %}
+                        "Tình trạng nhân viên" cho phép vào trang quản trị.
+                    {% endif %}
                 </p>
             {% endif %}
         </div>
@@ -207,6 +215,14 @@
             </p>
         </div>
 
+        {% if not may_edit_accounts %}
+            <p class="ta-note" style="border-left:3px solid #f0a1a1; padding-left:.7em">
+                Bạn được <b>tạo tài khoản mới</b>, in phiếu và cấp quyền vào kỳ thi.
+                Dòng nào trùng email hoặc trùng tên đăng nhập với tài khoản đã có sẽ bị
+                <b>bỏ qua</b> — sửa thông tin tài khoản người khác cần quyền quản trị
+                tài khoản.
+            </p>
+        {% endif %}
         <button type="submit" class="button ta-go">Chạy</button>
         <p class="ta-note">Bấm xong hệ thống chạy trên server rồi trả về một file ZIP gồm
             <code>tai-khoan.csv</code> (kèm mật khẩu mới + trạng thái từng dòng) và

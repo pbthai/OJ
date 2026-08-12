@@ -452,8 +452,21 @@ def calendar_page(request):
 # ---------------------------------------------------------------------------
 
 def _may_manage_accounts(user):
-    return user.is_active and (user.has_perm('hcmus.manage_accounts') or
-                               user.has_perm('auth.add_user') or
+    """Được VÀO trang cấp tài khoản: mọi nhân viên. Việc tạo tài khoản mới, in
+    phiếu và cấp quyền vào kỳ thi là việc chung của ban tổ chức."""
+    return user.is_active and user.is_staff
+
+
+def _may_edit_accounts(user):
+    """Được SỬA tài khoản đã tồn tại: đổi tên đăng nhập, ghi đè email, đổi mật
+    khẩu, đổi họ tên/tổ chức/quyền của người khác — và cấp cờ 'nhân viên'.
+
+    Nhân viên thường chỉ tạo mới được. Sửa thông tin tài khoản người khác là việc
+    của người có quyền quản trị tài khoản, vì sửa được thì cũng chiếm được: đổi
+    email của một tài khoản sang email mình rồi bấm quên mật khẩu là vào được.
+    """
+    return user.is_active and (user.is_superuser or
+                               user.has_perm('hcmus.manage_accounts') or
                                user.has_perm('auth.change_user'))
 
 
@@ -508,6 +521,7 @@ def accounts_page(request):
         'default_url': request.build_absolute_uri('/').rstrip('/'),
         'contests': _eligible_contests(request.user),
         'grantable_groups': _grantable_groups(request.user),
+        'may_edit_accounts': _may_edit_accounts(request.user),
         'mail_subject_default': acc_mod.DEFAULT_MAIL_SUBJECT,
         'mail_body_default': acc_mod.DEFAULT_MAIL_BODY,
     }
@@ -527,8 +541,8 @@ def accounts_page(request):
     # slips = chỉ in phiếu, KHÔNG đụng DB (dùng khi tài khoản nằm ở contest/trang
     # khác). Chỉ cần quyền mở trang; create/reset mới cần quyền ghi tài khoản.
     if mode in ('create', 'reset'):
-        need = 'auth.add_user' if mode == 'create' else 'auth.change_user'
-        if not (request.user.has_perm('hcmus.manage_accounts') or request.user.has_perm(need)):
+        # 'reset' là đổi mật khẩu người khác -> phải có quyền quản trị tài khoản.
+        if mode == 'reset' and not _may_edit_accounts(request.user):
             raise PermissionDenied()
 
     # Nguồn dữ liệu: ưu tiên file tải lên, không thì ô dán text.
@@ -560,6 +574,7 @@ def accounts_page(request):
         allowed = {g.name: g for g in _grantable_groups(request.user)}
         chosen = [allowed[n] for n in request.POST.getlist('groups') if n in allowed]
         send_activation = request.POST.get('send_activation') == 'on'
+        may_edit = _may_edit_accounts(request.user)
         try:
             results = acc.run_batch(
                 text, mode,
@@ -571,6 +586,10 @@ def accounts_page(request):
                 groups=chosen,
                 mail_subject=request.POST.get('mail_subject', '').strip(),
                 mail_body=request.POST.get('mail_body', ''),
+                may_update=may_edit,
+                # Cờ nhân viên chỉ người quản trị tài khoản mới cấp được: cấp nó
+                # là mở cửa vào trang quản trị, không phải thứ ai cũng phát được.
+                make_staff=may_edit and request.POST.get('make_staff') == 'on',
             )
         except ValueError as e:
             # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Hiện thành cảnh

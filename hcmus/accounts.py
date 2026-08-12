@@ -231,7 +231,7 @@ def _orgs_for(school, extra_orgs, username, cache):
 
 def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
               send_activation=False, base_url='', groups=(),
-              mail_subject='', mail_body=''):
+              mail_subject='', mail_body='', may_update=True, make_staff=False):
     """Chạy một mẻ tạo/đổi mật khẩu. Trả về list dict kết quả, mỗi dòng có thêm
     'status' (và 'password' = mật khẩu mới, rỗng nếu dòng bị bỏ qua).
 
@@ -240,6 +240,11 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
       tạo được một nửa rồi mới báo lỗi thì dọn rất mệt.
     groups: các Group gán cho tài khoản mới tạo VÀ tài khoản được cập nhật (chỉ
       THÊM, không gỡ nhóm sẵn có).
+    may_update: người chạy có quyền SỬA tài khoản đã tồn tại không. Tắt thì chỉ tạo
+      mới được; dòng nào trùng email/tên đăng nhập sẽ bị bỏ qua kèm lý do. Nhân
+      viên thường chỉ được tạo mới, còn sửa thông tin người khác là việc của người
+      có quyền quản trị tài khoản.
+    make_staff: đặt cờ 'tình trạng nhân viên' cho tài khoản MỚI TẠO.
     """
     from judge.models import Language, Organization, Profile
     if mode not in ('create', 'reset'):
@@ -302,6 +307,12 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                     elif user is not None:
                         target, mode_row = user, 'ghi đè email'
 
+                    if target is not None and not may_update:
+                        results.append({**skip, 'status':
+                                        f'BỎ QUA: đã có tài khoản ({mode_row}) — '
+                                        'bạn không có quyền sửa tài khoản đã tồn tại'})
+                        continue
+
                     if target is not None:
                         renamed = target.username != username
                         old_name = target.username
@@ -343,6 +354,8 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                         continue
 
                     user = User.objects.create_user(username=username, password=password)
+                    if make_staff:
+                        user.is_staff = True
                     profile = Profile(user=user, language=lang)
                     profile.save()
                     if email:
@@ -353,7 +366,7 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                             profile.username_display_override = name[:100]
                             profile.save()
                     user.save()
-                    status = 'tạo mới'
+                    status = 'tạo mới' + (' +nhân viên' if make_staff else '')
                     for org in _orgs_for(school, extra_org, username, org_cache):
                         profile.organizations.add(org)
                         status += f' +{org.slug}'
