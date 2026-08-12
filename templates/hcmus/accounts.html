@@ -117,6 +117,27 @@
             <div class="ta-row" style="align-items:flex-start">
                 <label><input type="checkbox" name="send_activation" checked> Gửi email kích hoạt</label>
             </div>
+            <div id="mail-tpl">
+                <div class="ta-row"><label>Tiêu đề thư</label>
+                    <input type="text" name="mail_subject" value="{{ mail_subject_default }}"></div>
+                <div class="ta-row" style="align-items:flex-start"><label>Nội dung thư</label>
+                    <textarea name="mail_body" rows="12"
+                              style="width:100%; font-family:inherit">{{ mail_body_default }}</textarea></div>
+                <p class="ta-note" style="margin:.1em 0 .8em">
+                    Sửa thoải mái. Các chỗ <code>{ten}</code> <code>{username}</code>
+                    <code>{link}</code> <code>{site}</code> sẽ được thay bằng dữ liệu thật của
+                    từng người nhận. Nhớ giữ lại <code>{link}</code>, thiếu nó thì người dùng
+                    không có đường đặt mật khẩu.
+                </p>
+            </div>
+            <script>
+                (function () {
+                    var cb = document.querySelector('input[name=send_activation]');
+                    var box = document.getElementById('mail-tpl');
+                    function sync() { box.style.display = cb.checked ? '' : 'none'; }
+                    cb.addEventListener('change', sync); sync();
+                })();
+            </script>
             <p class="ta-note" style="margin:.2em 0 .8em">
                 Người dùng nhận thư kèm liên kết để <b>tự đặt mật khẩu</b> (liên kết có hạn 3 ngày).
                 Thiếu cột email thì hệ thống tự suy từ <b>mã sinh viên</b> (8 chữ số →

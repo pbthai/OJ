@@ -489,6 +489,7 @@ def _eligible_contests(user):
 
 
 def accounts_page(request):
+    from hcmus import accounts as acc_mod
     """Trang quản trị: dán CSV/text hoặc tải file, chọn tạo-mới / đổi-mật-khẩu,
     bấm một nút -> chạy trên server -> trả về file ZIP gồm CSV mật khẩu + PDF phiếu.
 
@@ -504,6 +505,8 @@ def accounts_page(request):
         'default_url': request.build_absolute_uri('/').rstrip('/'),
         'contests': _eligible_contests(request.user),
         'grantable_groups': _grantable_groups(request.user),
+        'mail_subject_default': acc_mod.DEFAULT_MAIL_SUBJECT,
+        'mail_body_default': acc_mod.DEFAULT_MAIL_BODY,
     }
 
     if request.method != 'POST':
@@ -563,6 +566,8 @@ def accounts_page(request):
                 send_activation=send_activation,
                 base_url=ctx['default_url'],
                 groups=chosen,
+                mail_subject=request.POST.get('mail_subject', '').strip(),
+                mail_body=request.POST.get('mail_body', ''),
             )
         except ValueError as e:
             # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Hiện thành cảnh

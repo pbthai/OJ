@@ -145,31 +145,57 @@ def activation_link(user, base_url):
                                           kwargs={'uidb64': uid, 'token': token})
 
 
-def send_activation_mail(user, base_url, site_name='FIT-HCMUS Online Judge'):
-    """Gửi thư kích hoạt. Trả về True nếu gửi được."""
+# Bản nháp mặc định của thư kích hoạt. Người tạo tài khoản sửa được trên form;
+# các chỗ {ten} {username} {link} {site} sẽ được thay bằng dữ liệu thật.
+# Thay bằng str.replace chứ KHÔNG dùng .format(): người dùng sửa thư có thể gõ dấu
+# ngoặc nhọn cho mục đích khác, .format() gặp là ném lỗi giữa lúc gửi cả mẻ.
+MAIL_PLACEHOLDERS = ('{ten}', '{username}', '{link}', '{site}')
+
+DEFAULT_MAIL_SUBJECT = 'Kích hoạt tài khoản {site}'
+
+DEFAULT_MAIL_BODY = """Chào {ten},
+
+Tài khoản của bạn trên {site} đã được tạo:
+
+    Tên đăng nhập: {username}
+
+Bấm vào liên kết dưới đây để kích hoạt tài khoản và tự đặt mật khẩu:
+
+    {link}
+
+Liên kết có hạn 3 ngày. Nếu hết hạn, vào trang đăng nhập và bấm "Quên mật khẩu"
+để nhận liên kết mới.
+
+Nếu bạn không yêu cầu tài khoản này, hãy bỏ qua thư.
+
+{site}
+"""
+
+
+def render_mail(text, user, link, site_name):
+    """Thay các chỗ giữ chỗ trong mẫu thư bằng dữ liệu thật."""
+    return (text.replace('{ten}', user.first_name or user.username)
+                .replace('{username}', user.username)
+                .replace('{link}', link)
+                .replace('{site}', site_name))
+
+
+def send_activation_mail(user, base_url, subject='', body='',
+                         site_name='FIT-HCMUS Online Judge'):
+    """Gửi thư kích hoạt. subject/body để trống thì dùng bản nháp mặc định."""
     from django.conf import settings
     from django.core.mail import send_mail
     link = activation_link(user, base_url)
-    who = user.first_name or user.username
-    body = (
-        f'Chào {who},\n\n'
-        f'Tài khoản của bạn trên {site_name} đã được tạo:\n\n'
-        f'    Tên đăng nhập: {user.username}\n\n'
-        'Bấm vào liên kết dưới đây để kích hoạt tài khoản và tự đặt mật khẩu:\n\n'
-        f'    {link}\n\n'
-        'Liên kết có hạn 3 ngày. Nếu hết hạn, vào trang đăng nhập và bấm "Quên mật khẩu" '
-        'để nhận liên kết mới.\n\n'
-        f'Nếu bạn không yêu cầu tài khoản này, hãy bỏ qua thư.\n\n'
-        f'{site_name}\n{base_url}\n'
-    )
-    send_mail(subject=f'Kích hoạt tài khoản {site_name}',
-              message=body, from_email=settings.DEFAULT_FROM_EMAIL,
+    send_mail(subject=render_mail(subject or DEFAULT_MAIL_SUBJECT, user, link, site_name),
+              message=render_mail(body or DEFAULT_MAIL_BODY, user, link, site_name),
+              from_email=settings.DEFAULT_FROM_EMAIL,
               recipient_list=[user.email], fail_silently=False)
     return True
 
 
 def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
-              send_activation=False, base_url='', groups=()):
+              send_activation=False, base_url='', groups=(),
+              mail_subject='', mail_body=''):
     """Chạy một mẻ tạo/đổi mật khẩu. Trả về list dict kết quả, mỗi dòng có thêm
     'status' (và 'password' = mật khẩu mới, rỗng nếu dòng bị bỏ qua).
 
@@ -298,7 +324,8 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
         by_name = {r['username']: r for r in results}
         for u in to_notify:
             try:
-                send_activation_mail(u, base_url or 'https://coding.fit.hcmus.edu.vn')
+                send_activation_mail(u, base_url or 'https://coding.fit.hcmus.edu.vn',
+                                     subject=mail_subject, body=mail_body)
                 if u.username in by_name:
                     by_name[u.username]['status'] += ' +đã gửi mail'
             except Exception as e:  # noqa: BLE001

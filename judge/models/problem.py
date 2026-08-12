@@ -347,7 +347,25 @@ class Problem(models.Model):
         if self.testers.filter(id=user.profile.id).exists():
             return True
 
+        # FIT-HCMUS: người phụ trách một KỲ THI (author / curator / tester của kỳ
+        # thi) được xem những bài NẰM TRONG kỳ thi đó, kể cả khi bài chưa công
+        # khai. Trước đây nhóm tester được cấp thẳng judge.see_private_problem nên
+        # nhìn thấy TOÀN BỘ bài ẩn của cả hệ thống — quá rộng. Luật này thay thế:
+        # phạm vi bám đúng theo kỳ thi được giao.
+        if self.is_visible_to_contest_staff(user):
+            return True
+
         return False
+
+    def is_visible_to_contest_staff(self, user):
+        """Bài này có nằm trong kỳ thi nào mà `user` là author/curator/tester không."""
+        if not user.is_authenticated:
+            return False
+        from judge.models import ContestProblem
+        return ContestProblem.objects.filter(problem_id=self.id).filter(
+            Q(contest__authors=user.profile) |
+            Q(contest__curators=user.profile) |
+            Q(contest__testers=user.profile)).exists()
 
     def is_rejudgeable_by(self, user):
         return user.has_perm('judge.rejudge_submission') and self.is_editable_by(user)
@@ -414,6 +432,14 @@ class Problem(models.Model):
         q |= Exists(Problem.authors.through.objects.filter(problem=OuterRef('pk'), profile=profile))
         q |= Exists(Problem.curators.through.objects.filter(problem=OuterRef('pk'), profile=profile))
         q |= Exists(Problem.testers.through.objects.filter(problem=OuterRef('pk'), profile=profile))
+        # FIT-HCMUS: và cả bài nằm trong kỳ thi mà người này phụ trách (xem
+        # is_visible_to_contest_staff). Dùng Exists cho khớp cách làm ở trên:
+        # join thẳng sẽ sinh dòng trùng, buộc phải .distinct() ở mọi nơi gọi tới.
+        from judge.models import ContestProblem
+        q |= Exists(ContestProblem.objects.filter(problem=OuterRef('pk')).filter(
+            Q(contest__authors=profile) |
+            Q(contest__curators=profile) |
+            Q(contest__testers=profile)))
         return q
 
     @classmethod
