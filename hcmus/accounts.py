@@ -133,7 +133,7 @@ def activation_link(user, base_url):
 
     Thực chất là link đặt lại mật khẩu của Django, nhưng thư gửi đi gọi là 'kích
     hoạt tài khoản' cho người nhận dễ hiểu. Hạn dùng theo PASSWORD_RESET_TIMEOUT
-    (mặc định 3 ngày) và tự hết hiệu lực ngay khi người dùng đặt xong mật khẩu.
+    (đặt 60 ngày ở local_settings) và tự hết hiệu lực ngay khi người dùng đặt xong mật khẩu.
     """
     from django.contrib.auth.tokens import default_token_generator
     from django.urls import reverse
@@ -163,7 +163,7 @@ Bấm vào liên kết dưới đây để kích hoạt tài khoản và tự đ
 
     {link}
 
-Liên kết có hạn 3 ngày. Nếu hết hạn, vào trang đăng nhập và bấm "Quên mật khẩu"
+Liên kết có hạn 60 ngày. Nếu hết hạn, vào trang đăng nhập và bấm "Quên mật khẩu"
 để nhận liên kết mới.
 
 Nếu bạn không yêu cầu tài khoản này, hãy bỏ qua thư.

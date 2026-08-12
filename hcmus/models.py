@@ -385,6 +385,13 @@ class TeamRoom(models.Model):
     updated = models.DateTimeField(auto_now=True, verbose_name=_('last updated'))
 
     class Meta:
+        # Quyền cấp tài khoản hàng loạt (trang /tai-khoan/). CỐ Ý không dùng
+        # auth.add_user / auth.change_user của Django: hai quyền đó mở luôn trang
+        # /admin/auth/user/, mà UserAdmin của DMOJ KHÔNG chặn sửa cờ is_superuser
+        # -> ai được cấp có thể tự nâng mình thành superuser. Quyền riêng này chỉ
+        # mở đúng công cụ cấp tài khoản, không kèm gì khác.
+        permissions = (('manage_accounts', 'Cấp tài khoản hàng loạt'),)
+        
         verbose_name = _('team room')
         verbose_name_plural = _('team rooms')
 

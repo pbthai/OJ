@@ -451,7 +451,9 @@ def calendar_page(request):
 # ---------------------------------------------------------------------------
 
 def _may_manage_accounts(user):
-    return user.is_active and (user.has_perm('auth.add_user') or user.has_perm('auth.change_user'))
+    return user.is_active and (user.has_perm('hcmus.manage_accounts') or
+                               user.has_perm('auth.add_user') or
+                               user.has_perm('auth.change_user'))
 
 
 def _grantable_groups(user):
@@ -525,7 +527,7 @@ def accounts_page(request):
     # khác). Chỉ cần quyền mở trang; create/reset mới cần quyền ghi tài khoản.
     if mode in ('create', 'reset'):
         need = 'auth.add_user' if mode == 'create' else 'auth.change_user'
-        if not request.user.has_perm(need):
+        if not (request.user.has_perm('hcmus.manage_accounts') or request.user.has_perm(need)):
             raise PermissionDenied()
 
     # Nguồn dữ liệu: ưu tiên file tải lên, không thì ô dán text.
@@ -595,32 +597,33 @@ def accounts_page(request):
         contest_note = '\n'.join(lines) + '\n'
 
     csv_text = acc.results_csv(results)
-    try:
-        pdf_bytes = slips.make_slips_pdf(
-            results,
-            title=request.POST.get('slip_title', '').strip() or 'FIT-HCMUS Online Judge',
-            contest=request.POST.get('slip_contest', '').strip(),
-            url=request.POST.get('slip_url', '').strip() or ctx['default_url'],
-        )
-    except Exception as e:  # noqa: BLE001  thiếu font/thư viện thì vẫn trả CSV
-        pdf_bytes = None
-        csv_text += f'\n# Không tạo được PDF phiếu: {e}\n'
-
-    # Tên kỳ thi in trên thẻ đeo và bảng tên: lấy ô "kỳ thi" của form, không có
-    # thì lấy tiêu đề phiếu.
-    event_name = (request.POST.get('slip_contest', '').strip()
-                  or request.POST.get('slip_title', '').strip()
-                  or 'FIT-HCMUS Online Judge')
-    try:
-        badge_copies = int(request.POST.get('badge_copies') or 3)
-    except ValueError:
-        badge_copies = 3
-    try:
-        badge_bytes = badges.make_badges_pdf(results, event=event_name, copies=badge_copies)
-        tent_bytes = badges.make_tents_pdf(results, event=event_name)
-    except Exception as e:  # noqa: BLE001
-        badge_bytes = tent_bytes = None
-        csv_text += f'\n# Không tạo được thẻ đeo / bảng tên: {e}\n'
+    # Mặc định KHÔNG tạo phiếu: phần lớn lần chạy chỉ để tạo tài khoản + gửi thư,
+    # mà dựng PDF cho vài trăm người thì chậm và ra file to không ai dùng.
+    # Mặc định KHÔNG tạo phiếu: phần lớn lần chạy chỉ để tạo tài khoản + gửi thư,
+    # mà dựng PDF cho vài trăm người thì chậm và ra file to không ai dùng tới.
+    want_slips = request.POST.get('want_slips') == 'on'
+    pdf_bytes = badge_bytes = tent_bytes = None
+    if want_slips:
+        # Tên kỳ thi in trên thẻ đeo và bảng tên: lấy ô "kỳ thi" của form, không
+        # có thì lấy tiêu đề phiếu.
+        event_name = (request.POST.get('slip_contest', '').strip()
+                      or request.POST.get('slip_title', '').strip()
+                      or 'FIT-HCMUS Online Judge')
+        try:
+            badge_copies = int(request.POST.get('badge_copies') or 3)
+        except ValueError:
+            badge_copies = 3
+        try:
+            pdf_bytes = slips.make_slips_pdf(
+                results,
+                title=request.POST.get('slip_title', '').strip() or 'FIT-HCMUS Online Judge',
+                contest=request.POST.get('slip_contest', '').strip(),
+                url=request.POST.get('slip_url', '').strip() or ctx['default_url'],
+            )
+            badge_bytes = badges.make_badges_pdf(results, event=event_name, copies=badge_copies)
+            tent_bytes = badges.make_tents_pdf(results, event=event_name)
+        except Exception as e:  # noqa: BLE001  thiếu font/thư viện thì vẫn trả CSV
+            csv_text += f'\n# Không tạo được PDF: {e}\n'
 
     changed = sum(1 for r in results if r['password'])
     buf = io.BytesIO()

@@ -139,7 +139,7 @@
                 })();
             </script>
             <p class="ta-note" style="margin:.2em 0 .8em">
-                Người dùng nhận thư kèm liên kết để <b>tự đặt mật khẩu</b> (liên kết có hạn 3 ngày).
+                Người dùng nhận thư kèm liên kết để <b>tự đặt mật khẩu</b> (liên kết có hạn 60 ngày).
                 Thiếu cột email thì hệ thống tự suy từ <b>mã sinh viên</b> (8 chữ số →
                 <code>&lt;mã&gt;@student.hcmus.edu.vn</code>) và tự thêm vào tổ chức HCMUS.
                 Dòng nào không có email và cũng không phải mã sinh viên thì
@@ -167,6 +167,15 @@
 
         <div class="ta-card">
             <h3>Phiếu đăng nhập (PDF)</h3>
+            <div class="ta-row" style="align-items:flex-start">
+                <label><input type="checkbox" name="want_slips" id="want-slips">
+                    Tạo &amp; tải về phiếu đăng nhập, thẻ đeo, bảng tên</label>
+            </div>
+            <p class="ta-note" style="margin:.1em 0 .8em">
+                Mặc định TẮT. Không tích thì chỉ tạo tài khoản, gửi thư và cấp quyền vào
+                kỳ thi — nhanh hơn nhiều khi chạy vài trăm người.
+            </p>
+            <div id="slip-opts">
             <div class="ta-row"><label>Tiêu đề</label>
                 <input type="text" name="slip_title" placeholder="FIT-HCMUS Online Judge"></div>
             <div class="ta-row"><label>Dòng phụ (kỳ thi)</label>
@@ -176,6 +185,15 @@
             <div class="ta-row"><label>Thẻ đeo mỗi đội</label>
                 <input type="number" name="badge_copies" value="3" min="1" max="10"
                        style="width:5em"></div>
+            </div>
+            <script>
+                (function () {
+                    var cb = document.getElementById('want-slips');
+                    var box = document.getElementById('slip-opts');
+                    function sync() { box.style.display = cb.checked ? '' : 'none'; }
+                    cb.addEventListener('change', sync); sync();
+                })();
+            </script>
             <p class="ta-note" style="margin:.4em 0 0">
                 Gói tải về có thêm <b>the-deo-ten.pdf</b> (bìa đeo 10×7,5 cm, cắt theo
                 viền đứt) và <b>bang-ten-ban.pdf</b> (A4 ngang, gấp đôi thành bảng tên
@@ -183,7 +201,7 @@
             </p>
         </div>
 
-        <button type="submit" class="button ta-go">Chạy &amp; tải về (CSV + phiếu + thẻ đeo + bảng tên)</button>
+        <button type="submit" class="button ta-go">Chạy</button>
         <p class="ta-note">Bấm xong hệ thống chạy trên server rồi trả về một file ZIP gồm
             <code>tai-khoan.csv</code> (kèm mật khẩu mới + trạng thái từng dòng) và
             <code>phieu-dang-nhap.pdf</code> (2 cột × 4 phiếu/trang A4, có viền cắt).</p>
