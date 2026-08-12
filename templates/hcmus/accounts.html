@@ -155,11 +155,11 @@
                 Email trùng với tài khoản cũ thì hệ thống <b>đổi tên đăng nhập</b> của tài
                 khoản đó thay vì tạo thêm tài khoản mới.
             </p>
-            {% if grantable_groups or may_edit_accounts %}
+            {% if grantable_groups or is_staff_creator %}
                 <div class="ta-row" style="align-items:flex-start">
                     <label>Quyền cho tài khoản mới</label>
                     <div>
-                        {% if may_edit_accounts %}
+                        {% if is_staff_creator %}
                             <label style="display:inline-block; margin:0 1em .3em 0">
                                 <input type="checkbox" name="make_staff"> <b>Tình trạng nhân viên</b>
                             </label>
@@ -174,8 +174,9 @@
                 <p class="ta-note" style="margin:.2em 0 0">
                     Không tích gì = tài khoản thường. Danh sách chỉ gồm các nhóm
                     <b>bạn đang thuộc</b>, vì không ai cấp được quyền mình không có.
-                    {% if may_edit_accounts %}
-                        "Tình trạng nhân viên" cho phép vào trang quản trị.
+                    {% if is_staff_creator %}
+                        "Tình trạng nhân viên" cho phép vào trang quản trị và vào
+                        chính trang này.
                     {% endif %}
                 </p>
             {% endif %}

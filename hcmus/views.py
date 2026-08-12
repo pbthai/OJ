@@ -527,6 +527,8 @@ def accounts_page(request):
         'contests': _eligible_contests(request.user),
         'grantable_groups': _grantable_groups(request.user),
         'may_edit_accounts': _may_edit_accounts(request.user),
+        # Cấp được cờ nhân viên: chính mình là nhân viên (ngang cấp).
+        'is_staff_creator': request.user.is_staff,
         'mail_subject_default': acc_mod.DEFAULT_MAIL_SUBJECT,
         'mail_body_default': acc_mod.DEFAULT_MAIL_BODY,
     }
@@ -592,9 +594,11 @@ def accounts_page(request):
                 mail_subject=request.POST.get('mail_subject', '').strip(),
                 mail_body=request.POST.get('mail_body', ''),
                 may_update=may_edit,
-                # Cờ nhân viên chỉ người quản trị tài khoản mới cấp được: cấp nó
-                # là mở cửa vào trang quản trị, không phải thứ ai cũng phát được.
-                make_staff=may_edit and request.POST.get('make_staff') == 'on',
+                # Nhân viên cấp được cờ nhân viên: ngang cấp mình, không phải leo
+                # quyền. Cùng luật với _grantable_groups — cho được thứ mình đang
+                # có, không cho được thứ cao hơn. Cờ superuser thì không đường nào
+                # cấp qua trang này.
+                make_staff=request.POST.get('make_staff') == 'on',
             )
         except ValueError as e:
             # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Hiện thành cảnh
