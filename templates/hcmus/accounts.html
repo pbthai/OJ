@@ -97,9 +97,15 @@
             <summary>Tuỳ chọn thêm</summary>
             <div class="ta-row">
                 <label>Thêm vào tổ chức (slug)</label>
-                <input type="text" name="org" placeholder="vd: icpc2026">
-                <span class="ta-note">chỉ áp dụng khi tạo mới</span>
+                <input type="text" name="org" placeholder="vd: hcmus lhp icpc2026">
+                <span class="ta-note">nhiều tổ chức thì ngăn bằng dấu cách</span>
             </div>
+            <p class="ta-note" style="margin:-.2em 0 .7em">
+                Cột <code>school</code> trong CSV cũng nhận nhiều tổ chức, ngăn bằng
+                <code>;</code> — không dùng dấu phẩy vì đó là dấu ngăn cột của CSV.
+                Ví dụ: <code>HCMUS;LHP</code>. Tài khoản là mã sinh viên thì luôn được
+                thêm vào <code>hcmus</code>.
+            </p>
             <div class="ta-row">
                 <label>Tên hiển thị = cột name</label>
                 <input type="checkbox" name="display_name" value="1">

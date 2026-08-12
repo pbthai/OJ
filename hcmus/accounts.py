@@ -75,6 +75,17 @@ def parse_rows(text):
     return out
 
 
+def split_orgs(value):
+    """Tách danh sách tổ chức. Dùng ';' hoặc '|' làm dấu phân cách chứ KHÔNG dùng
+    dấu phẩy — file là CSV, dấu phẩy đã là dấu ngăn cột."""
+    out = []
+    for part in (value or '').replace('|', ';').split(';'):
+        part = part.strip()
+        if part and part not in out:
+            out.append(part)
+    return out
+
+
 def _school_org(name, cache):
     """get_or_create Organization theo tên trường (so khớp không phân biệt hoa thường)."""
     from judge.models import Organization
@@ -193,6 +204,31 @@ def send_activation_mail(user, base_url, subject='', body='',
     return True
 
 
+def _orgs_for(school, extra_orgs, username, cache):
+    """Toàn bộ tổ chức cần gắn cho một tài khoản, theo thứ tự:
+      1. cột `school` trong CSV — cho phép NHIỀU, ngăn bằng ';' hoặc '|';
+      2. các tổ chức chọn trên form (ô "thêm vào tổ chức"), cũng cho phép nhiều;
+      3. hcmus nếu tên đăng nhập là mã sinh viên.
+    Trả về danh sách đã khử trùng, giữ nguyên thứ tự.
+    """
+    from judge.models import Organization
+    out = []
+    for name in split_orgs(school):
+        out.append(_school_org(name, cache))
+    for org in (extra_orgs or []):
+        out.append(org)
+    if is_student_id(username):
+        org = Organization.objects.filter(slug=STUDENT_ORG_SLUG).first()
+        if org is not None:
+            out.append(org)
+    seen, uniq = set(), []
+    for o in out:
+        if o.pk not in seen:
+            seen.add(o.pk)
+            uniq.append(o)
+    return uniq
+
+
 def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
               send_activation=False, base_url='', groups=(),
               mail_subject='', mail_body=''):
@@ -202,8 +238,8 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
     send_activation: gửi thư để người dùng tự đặt mật khẩu (xem send_activation_mail).
       Bật thì mọi dòng PHẢI suy ra được email, nếu không cả mẻ bị chặn từ đầu —
       tạo được một nửa rồi mới báo lỗi thì dọn rất mệt.
-    groups: các Group gán cho tài khoản MỚI TẠO. Không đụng nhóm của tài khoản đã
-      có sẵn: đổi ID cho ai đó không phải là cớ để nâng quyền họ.
+    groups: các Group gán cho tài khoản mới tạo VÀ tài khoản được cập nhật (chỉ
+      THÊM, không gỡ nhóm sẵn có).
     """
     from judge.models import Language, Organization, Profile
     if mode not in ('create', 'reset'):
@@ -218,7 +254,9 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                 'không phải mã sinh viên (8 chữ số): {}. Giảng viên không đoán được '
                 'email từ tên đăng nhập nên phải nhập tay. Chưa tạo tài khoản nào.'
                 .format(len(thieu), ', '.join(thieu[:10]) + ('...' if len(thieu) > 10 else '')))
-    extra_org = Organization.objects.filter(slug=org_slug).first() if org_slug else None
+    # Ô 'thêm vào tổ chức' nhận NHIỀU slug, ngăn bằng dấu cách, phẩy hoặc ';'.
+    wanted = [x for x in re.split(r'[\s,;|]+', org_slug or '') if x]
+    extra_org = list(Organization.objects.filter(slug__in=wanted)) if wanted else []
     lang = Language.get_default_language()
     org_cache = {}
     results = []
@@ -240,35 +278,70 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                     continue
 
                 if mode == 'create':
-                    # Email là danh tính thật của người dùng, tên đăng nhập chỉ là
-                    # nhãn. Nên nếu email đã có trong hệ thống thì KHÔNG tạo tài
-                    # khoản thứ hai: hoặc bỏ qua (đã đúng tên), hoặc đổi tên đăng
-                    # nhập của tài khoản cũ sang tên mới.
+                    # DANH TÍNH LÀ EMAIL. Ba đường đi:
+                    #   1. trùng email  -> CẬP NHẬT tài khoản đó (tên đăng nhập, họ
+                    #      tên, tổ chức, nhóm quyền). Gửi thư nếu đổi tên đăng nhập.
+                    #   2. khác email nhưng trùng tên đăng nhập -> GHI ĐÈ email mới
+                    #      và huỷ mật khẩu cũ, gửi thư. Đây là cách trả tên đăng nhập
+                    #      về đúng người: ai đó đăng ký chiếm sẵn tên của người khác
+                    #      thì mất quyền vào, không thì họ vẫn đăng nhập bằng mật
+                    #      khẩu cũ dù email đã sang chủ mới.
+                    #   3. không trùng gì -> tạo mới, gửi thư.
                     by_email = (User.objects.filter(email__iexact=email).first()
                                 if email else None)
+                    target, mode_row = None, ''
                     if by_email is not None:
                         if by_email.is_staff or by_email.is_superuser:
                             results.append({**skip, 'status': 'BỎ QUA: email thuộc tài khoản quản trị'})
                             continue
-                        if by_email.username == username:
-                            results.append({**skip, 'status': 'ĐÃ ĐÚNG (email + tên trùng) - bỏ qua'})
-                            continue
-                        if user is not None:
+                        if user is not None and user.pk != by_email.pk:
                             results.append({**skip, 'status':
                                             f'LỖI: tên "{username}" đã thuộc tài khoản khác'})
                             continue
-                        cu = by_email.username
-                        by_email.username = username
-                        by_email.save(update_fields=['username'])
-                        to_notify.append(by_email)
+                        target, mode_row = by_email, 'cập nhật'
+                    elif user is not None:
+                        target, mode_row = user, 'ghi đè email'
+
+                    if target is not None:
+                        renamed = target.username != username
+                        old_name = target.username
+                        target.username = username
+                        fields = ['username']
+                        if mode_row == 'ghi đè email':
+                            target.email = email
+                            # Mật khẩu cũ phải chết theo, nếu không chủ cũ vẫn vào được.
+                            target.set_unusable_password()
+                            fields += ['email', 'password']
+                        if name:
+                            target.first_name = name[:150]
+                            fields.append('first_name')
+                        target.save(update_fields=sorted(set(fields)))
+                        profile = target.profile
+                        if name and display_name:
+                            profile.username_display_override = name[:100]
+                            profile.save(update_fields=['username_display_override'])
+                        status = mode_row
+                        if renamed:
+                            status += f': {old_name} -> {username}'
+                        for org in _orgs_for(school, extra_org, username, org_cache):
+                            if not profile.organizations.filter(pk=org.pk).exists():
+                                profile.organizations.add(org)
+                                status += f' +{org.slug}'
+                        if groups:
+                            target.groups.add(*groups)
+                            status += ' +quyền:' + ','.join(g.name for g in groups)
+                        # Gửi thư khi TẠO MỚI hoặc ĐỔI TÊN ĐĂNG NHẬP hoặc GHI ĐÈ EMAIL.
+                        if send_activation and email and (renamed or mode_row == 'ghi đè email'):
+                            to_notify.append(target)
+                        if room:
+                            from hcmus.models import TeamRoom
+                            TeamRoom.objects.update_or_create(profile=profile,
+                                                              defaults={'room': room})
                         results.append({'username': username, 'password': '', 'name': name,
                                         'school': school, 'email': email, 'room': room,
-                                        'status': f'ĐỔI TÊN: {cu} -> {username}'})
+                                        'status': status})
                         continue
 
-                    if user:
-                        results.append({**skip, 'status': 'ĐÃ TỒN TẠI - bỏ qua'})
-                        continue
                     user = User.objects.create_user(username=username, password=password)
                     profile = Profile(user=user, language=lang)
                     profile.save()
@@ -281,18 +354,9 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
                             profile.save()
                     user.save()
                     status = 'tạo mới'
-                    if school:
-                        profile.organizations.add(_school_org(school, org_cache))
-                        status += ' +trường'
-                    if extra_org is not None:
-                        profile.organizations.add(extra_org)
-                        status += f' +{extra_org.slug}'
-                    # Mã sinh viên thì chắc chắn là người của trường.
-                    if is_student_id(username):
-                        org = Organization.objects.filter(slug=STUDENT_ORG_SLUG).first()
-                        if org is not None and not profile.organizations.filter(pk=org.pk).exists():
-                            profile.organizations.add(org)
-                            status += f' +{org.slug}'
+                    for org in _orgs_for(school, extra_org, username, org_cache):
+                        profile.organizations.add(org)
+                        status += f' +{org.slug}'
                     if groups:
                         user.groups.add(*groups)
                         status += ' +quyền:' + ','.join(g.name for g in groups)
