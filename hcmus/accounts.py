@@ -39,6 +39,10 @@ HEADER_ALIASES = {
 }
 COLS = ['username', 'password', 'name', 'school', 'email', 'room']
 
+# Bộ ký tự tên đăng nhập, lấy theo mặc định của Django. Cốt để chặn khoảng trắng
+# và tab: dán nhầm định dạng thì cả dòng thành một "tên đăng nhập" khổng lồ.
+USERNAME_RE = re.compile(r'^[\w.@+-]+$')
+
 
 def gen_pass():
     return ''.join(secrets.choice(PASS_ALPHABET) for _ in range(PASS_LEN))
@@ -53,8 +57,13 @@ def parse_rows(text):
 
     Tự nhận header (có cột 'username' thì map theo tên cột, không thì hiểu theo thứ
     tự username,password,name,school,email). Dòng thiếu username thì bỏ.
+
+    Nhận cả dấu phẩy lẫn TAB làm dấu ngăn cột, vì bôi đen trên Excel rồi dán ra
+    TAB chứ không ra phẩy. KHÔNG nhận ';' — dấu đó đang dùng để ngăn nhiều tổ
+    chức trong cùng một ô (xem split_orgs), nhận luôn thì hai cách hiểu đá nhau.
     """
-    reader = csv.reader(io.StringIO(text))
+    head = next((ln for ln in text.splitlines() if ln.strip()), '')
+    reader = csv.reader(io.StringIO(text), delimiter='\t' if '\t' in head else ',')
     rows = [r for r in reader if r and any(c.strip() for c in r)]
     if not rows:
         return []
@@ -273,6 +282,11 @@ def run_batch(text, mode, org_slug='', display_name=False, email_domain='',
         email = resolve_email(row['email'], username, email_domain)
         password = row['password'] or gen_pass()
         skip = dict(row, password='', status='')
+        if not USERNAME_RE.match(username):
+            results.append({**skip, 'status':
+                            'LỖI: tên đăng nhập có ký tự lạ (khoảng trắng, tab...). '
+                            'Kiểm lại dấu ngăn cột của dữ liệu dán vào.'})
+            continue
         try:
             with transaction.atomic():
                 user = User.objects.filter(username=username).first()
