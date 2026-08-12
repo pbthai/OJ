@@ -509,15 +509,20 @@ def accounts_page(request):
     """Trang quản trị: dán CSV/text hoặc tải file, chọn tạo-mới / đổi-mật-khẩu,
     bấm một nút -> chạy trên server -> trả về file ZIP gồm CSV mật khẩu + PDF phiếu.
 
-    Gác quyền: auth.add_user (tạo) / auth.change_user (đổi mật khẩu). Lõi ở
-    accounts.run_batch còn chặn cứng không đụng tài khoản quản trị."""
+    Gác quyền: _may_manage_accounts (tạo mới, in phiếu) / _may_edit_accounts (đổi
+    mật khẩu, sửa tài khoản đã có). Lõi ở accounts.run_batch còn chặn cứng không
+    đụng tài khoản quản trị.
+
+    Hai cờ can_create/can_reset phải bám đúng hai hàm đó. Có thời chúng bám vào
+    auth.add_user/auth.change_user, mà hai quyền Django này không cấp cho ai (xem
+    docs/10) — thành ra nhân viên vào trang chỉ thấy mỗi mục in phiếu."""
     if not _may_manage_accounts(request.user):
         raise PermissionDenied()
 
     ctx = {
         'title': _('Bulk accounts'),
-        'can_create': request.user.has_perm('auth.add_user'),
-        'can_reset': request.user.has_perm('auth.change_user'),
+        'can_create': True,     # tới được đây nghĩa là đã qua _may_manage_accounts
+        'can_reset': _may_edit_accounts(request.user),
         'default_url': request.build_absolute_uri('/').rstrip('/'),
         'contests': _eligible_contests(request.user),
         'grantable_groups': _grantable_groups(request.user),

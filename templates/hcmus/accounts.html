@@ -49,8 +49,10 @@
             <label><input type="radio" name="mode" value="slips"> Chỉ in phiếu (không tạo/đổi tài khoản)</label>
             <p class="ta-note">
                 <b>Tạo mới:</b> username đã có thì bỏ qua; đặt luôn tên/tổ chức/email.
-                <b>Đổi mật khẩu:</b> chỉ đổi mật khẩu tài khoản đã có, giữ nguyên mọi thứ khác;
-                username chưa tồn tại thì bỏ qua.
+                {% if can_reset %}
+                    <b>Đổi mật khẩu:</b> chỉ đổi mật khẩu tài khoản đã có, giữ nguyên mọi thứ
+                    khác; username chưa tồn tại thì bỏ qua.
+                {% endif %}
                 <b>Chỉ in phiếu:</b> không đụng tài khoản, chỉ in phiếu từ danh sách (cần có sẵn
                 cột <code>password</code>) — dùng khi tài khoản nằm ở contest/trang khác.
             </p>
