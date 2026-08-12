@@ -811,8 +811,8 @@ class LandingPageForm(ModelForm):
                 data['html'] = raw.decode('utf-8')
             except UnicodeDecodeError:
                 raise forms.ValidationError('File phải là văn bản mã UTF-8.')
-        elif not (data.get('html') or '').strip():
-            raise forms.ValidationError('Phải có nội dung: dán HTML hoặc tải file lên.')
+        # Cho phép để TRỐNG: trang mới lập thường chỉ cần cái tiêu đề trước, nội
+        # dung điền sau. Khung giao diện tự hiện tiêu đề nên trang rỗng vẫn tử tế.
         return data
 
 
