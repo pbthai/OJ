@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{# Nạp đề bài từ file .tex viết theo bộ macro olymp/ptnk. Hai bước: đọc file ->
+   soi Markdown -> ghi đè. Xem hcmus/tex_import.py. #}
+{% block media %}
+    <style>
+        .tx-card { border: 1px solid var(--tx-border, #ddd); border-radius: 6px;
+                   padding: 1em 1.2em; margin-bottom: 1em; }
+        .tx-note { color: #777; font-size: .92em; }
+        .tx-err { border-left: 3px solid #d9534f; padding-left: .8em; color: #b52b27; }
+        .tx-ok { border-left: 3px solid #3c9a5f; padding-left: .8em; }
+        .tx-row { display: flex; gap: 1em; align-items: center; flex-wrap: wrap;
+                  margin-bottom: .6em; }
+        .tx-row label { min-width: 9em; }
+        textarea.tx-md { width: 100%; min-height: 26em; font-family: monospace;
+                         font-size: .88em; }
+        .tx-meta td { padding: .15em .8em .15em 0; }
+        .tx-meta th { text-align: left; padding-right: .8em; font-weight: 600; }
+        code.tx-tag { background: rgba(127, 127, 127, .15); padding: .05em .35em;
+                      border-radius: 3px; }
+    </style>
+{% endblock %}
+
+{% block body %}
+    {% if error %}<p class="tx-err">{{ error }}</p>{% endif %}
+    {% if saved %}
+        <p class="tx-ok">Đã ghi đè đề bài của
+            <a href="{{ url('problem_detail', problem.code) }}">{{ problem.code }}</a>.
+            Kiểm lại trang đề để chắc chắn công thức và dữ liệu mẫu hiện đúng.</p>
+    {% endif %}
+
+    {% if not markdown and not choices %}
+        <div class="tx-card">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="tx-row">
+                    <label>Mã bài</label>
+                    <input type="text" name="code" value="{{ code }}" required
+                           placeholder="vd: nhacsi2026">
+                    {% if problem %}<span class="tx-note">{{ problem.name }}</span>{% endif %}
+                </div>
+                <div class="tx-row">
+                    <label>File đề (.tex)</label>
+                    <input type="file" name="file" accept=".tex,text/plain" required>
+                </div>
+                <button type="submit" class="button">Đọc file</button>
+            </form>
+            <p class="tx-note" style="margin-top:1em">
+                File viết theo bộ macro olymp/ptnk: mỗi bài nằm trong
+                <code class="tx-tag">\begin{problem}...\end{problem}</code>, các mục đánh dấu
+                bằng <code class="tx-tag">\InputFile</code>,
+                <code class="tx-tag">\OutputFile</code>,
+                <code class="tx-tag">\Examples</code> với
+                <code class="tx-tag">\exmp{vào}{ra}</code>,
+                <code class="tx-tag">\Explanation</code>,
+                <code class="tx-tag">\Scoring</code>.
+                Tải đúng file đề của một bài, không phải file bọc cả kỳ thi.
+                Đọc xong sẽ hiện nội dung để bạn xem trước, chưa ghi gì vào đề.
+            </p>
+        </div>
+    {% endif %}
+
+    {% if choices %}
+        <div class="tx-card">
+            <p>File có nhiều bài. Chọn bài cần lấy:</p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="code" value="{{ code }}">
+                <textarea name="tex" style="display:none">{{ tex }}</textarea>
+                {% for i, ten in choices %}
+                    <div><label>
+                        <input type="radio" name="which" value="{{ i }}"
+                               {% if loop.first %}checked{% endif %}> {{ ten }}
+                    </label></div>
+                {% endfor %}
+                <button type="submit" class="button" style="margin-top:.8em">Đọc bài đã chọn</button>
+            </form>
+        </div>
+    {% endif %}
+
+    {% if markdown and not saved %}
+        <div class="tx-card">
+            <table class="tx-meta">
+                <tr><th>Bài sẽ bị ghi đè</th>
+                    <td><a href="{{ url('problem_detail', problem.code) }}">{{ problem.code }}</a>
+                        — {{ problem.name }}</td></tr>
+                {% if parsed %}
+                    <tr><th>Tên trong file .tex</th><td>{{ parsed.title or '(trống)' }}</td></tr>
+                    <tr><th>Số ví dụ đọc được</th><td>{{ parsed.samples|length }}</td></tr>
+                    {% if parsed.time_limit or parsed.memory_limit %}
+                        <tr><th>Giới hạn ghi trong file</th>
+                            <td>{{ parsed.time_limit }} {{ parsed.memory_limit }}
+                                <span class="tx-note">(chỉ để tham khảo, trang này không
+                                    đổi giới hạn của bài)</span></td></tr>
+                    {% endif %}
+                    {% if parsed.exmpfile %}
+                        <tr><th>Bỏ qua</th>
+                            <td>{{ parsed.exmpfile }} ví dụ khai bằng
+                                <code class="tx-tag">\exmpfile</code> (trỏ tới file ngoài,
+                                không có trong file tải lên) — hãy thêm tay.</td></tr>
+                    {% endif %}
+                {% endif %}
+            </table>
+        </div>
+
+        <div class="tx-card">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="code" value="{{ problem.code }}">
+                <input type="hidden" name="confirm" value="1">
+                <p class="tx-note">Sửa trực tiếp ở đây nếu chỗ nào dịch chưa vừa ý. Công thức
+                    dùng dấu <code class="tx-tag">~</code> hai đầu là đúng chuẩn của site.</p>
+                <textarea class="tx-md" name="markdown">{{ markdown }}</textarea>
+                <p style="margin-top:.8em">
+                    <button type="submit" class="button">Ghi đè đề bài</button>
+                    <span class="tx-note" style="margin-left:.6em">Đề cũ sẽ mất. Site có lưu
+                        lịch sử chỉnh sửa bài nên vẫn xem lại được bản trước.</span>
+                </p>
+            </form>
+        </div>
+    {% endif %}
+{% endblock %}

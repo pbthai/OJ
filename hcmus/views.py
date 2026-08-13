@@ -244,6 +244,119 @@ def resolver(request, contest_key):
 
 
 # ==========================================================================
+# Nạp đề bài từ file .tex (định dạng olymp/ptnk)
+# ==========================================================================
+
+MAX_TEX_SIZE = 2 * 1024 * 1024
+
+
+def _editable_problem(user, code):
+    """Bài mà `user` được sửa. Dùng chính is_editable_by của site chứ không tự
+    chế luật riêng, để trang này không rộng hơn nút 'Sửa bài' sẵn có."""
+    from judge.models import Problem
+    problem = Problem.objects.filter(code=code).first()
+    if problem is None:
+        raise Http404()
+    if not problem.is_editable_by(user):
+        raise PermissionDenied()
+    return problem
+
+
+@login_required
+def problem_tex(request):
+    """Nạp đề từ file .tex, ghi đè đề đang có.
+
+    Hai bước, cố ý không gộp: bước một đọc file rồi hiện Markdown sinh ra để
+    người dùng soi và sửa tay; bước hai mới ghi đè. Ghi đè đề bài là việc không
+    lùi lại được, không nên xảy ra ngay khi vừa bấm chọn file.
+    """
+    from hcmus import tex_import
+    code = (request.GET.get('problem') or request.POST.get('code') or '').strip()
+    ctx = {'title': 'Nạp đề bài từ file .tex', 'code': code}
+
+    if request.method != 'POST':
+        if code:
+            ctx['problem'] = _editable_problem(request.user, code)
+        return render(request, 'hcmus/problem-tex.html', ctx)
+
+    problem = _editable_problem(request.user, code)
+    ctx['problem'] = problem
+
+    # Bước 2: đã xem Markdown, bấm ghi đè.
+    if request.POST.get('confirm') == '1':
+        md = request.POST.get('markdown', '')
+        if not md.strip():
+            ctx['error'] = 'Nội dung rỗng, không ghi đè.'
+            return render(request, 'hcmus/problem-tex.html', ctx)
+        # Ghi qua reversion như trang sửa bài của site, để đề cũ còn xem lại được
+        # ở Admin -> Bài tập -> Lịch sử. Gọi thẳng problem.save() thì đề cũ mất hẳn.
+        from reversion import revisions
+        with revisions.create_revision(atomic=True):
+            problem.description = md
+            problem.save(update_fields=['description'])
+            revisions.set_user(request.user)
+            revisions.set_comment('Nạp đề từ file .tex')
+        ctx['saved'] = True
+        ctx['markdown'] = md
+        return render(request, 'hcmus/problem-tex.html', ctx)
+
+    # Bước 1: đọc file. Lần chọn bài (POST thứ hai) không còn file nữa nên nội
+    # dung được mang theo trong ô ẩn 'tex'.
+    upload = request.FILES.get('file')
+    if upload is not None:
+        if upload.size > MAX_TEX_SIZE:
+            ctx['error'] = f'File lớn hơn {MAX_TEX_SIZE // 1024 // 1024} MB.'
+            return render(request, 'hcmus/problem-tex.html', ctx)
+        try:
+            text = upload.read().decode('utf-8')
+        except UnicodeDecodeError:
+            ctx['error'] = 'File không phải UTF-8. Lưu lại bằng mã hoá UTF-8 rồi tải lên.'
+            return render(request, 'hcmus/problem-tex.html', ctx)
+    else:
+        text = request.POST.get('tex', '')
+        if not text.strip():
+            ctx['error'] = 'Chưa chọn file .tex.'
+            return render(request, 'hcmus/problem-tex.html', ctx)
+
+    try:
+        found = tex_import.parse_problems(text)
+    except tex_import.TexImportError as e:
+        ctx['error'] = str(e)
+        return render(request, 'hcmus/problem-tex.html', ctx)
+
+    if not found:
+        ctx['error'] = (r'Không thấy \begin{problem} nào trong file. Nếu đây là file bọc '
+                        r'cả kỳ thi (chỉ gồm các dòng \input) thì hãy tải lên đúng file đề '
+                        'của một bài.')
+        return render(request, 'hcmus/problem-tex.html', ctx)
+
+    # Nhiều bài trong một file: ưu tiên bài có tên trùng mã bài đang sửa, không
+    # thì để người dùng chọn.
+    chon = request.POST.get('which')
+    if chon is None and len(found) > 1:
+        khop = [i for i, p in enumerate(found) if p['title'].strip().lower() == code.lower()]
+        chon = str(khop[0]) if len(khop) == 1 else None
+    if chon is None and len(found) == 1:
+        chon = '0'
+    if chon is None:
+        ctx['choices'] = [(i, p['title'] or f'(bài thứ {i + 1})') for i, p in enumerate(found)]
+        ctx['tex'] = text
+        return render(request, 'hcmus/problem-tex.html', ctx)
+
+    p = found[int(chon)]
+    try:
+        ctx['markdown'] = tex_import.build_description(p)
+    except FileNotFoundError:
+        ctx['error'] = 'Server thiếu pandoc, không dịch được LaTeX. Báo quản trị viên.'
+        return render(request, 'hcmus/problem-tex.html', ctx)
+    except Exception as e:  # noqa: BLE001  pandoc lỗi thì báo, đừng để 500
+        ctx['error'] = f'pandoc không dịch được file này: {e}'
+        return render(request, 'hcmus/problem-tex.html', ctx)
+    ctx['parsed'] = p
+    return render(request, 'hcmus/problem-tex.html', ctx)
+
+
+# ==========================================================================
 # Tải PDF đề bài trọn bộ của một contest
 # ==========================================================================
 

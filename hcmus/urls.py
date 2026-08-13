@@ -10,6 +10,7 @@ urlpatterns = [
     path('de-bai/', views.statement_index, name='hcmus_statement_index'),
     path('de-bai/<str:contest_key>/tai-ve.pdf', views.statement_download,
          name='hcmus_statement_download'),
+    path('nap-de-tex/', views.problem_tex, name='hcmus_problem_tex'),
     path('suc-khoe/', views.health_page, name='hcmus_health'),
     path('suc-khoe/data.json', views.health_data, name='hcmus_health_data'),
     path('suc-khoe/may-cham/<str:name>/', views.health_judge_toggle, name='hcmus_judge_toggle'),

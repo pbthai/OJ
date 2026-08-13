@@ -205,6 +205,8 @@
             </a>
         </div>
         <div><a href="{{ url('problem_edit', problem.code) }}">{{ _('Edit problem') }}</a></div>
+        {# Nạp đề từ file .tex olymp/ptnk, ghi đè đề đang có (xem hcmus/tex_import.py). #}
+        <div><a href="{{ url('hcmus_problem_tex') }}?problem={{ problem.code }}">Nạp đề từ .tex</a></div>
         <div><a href="{{ url('problem_delete', problem.code) }}?next={{ request.get_full_path()|urlencode }}">{{ _('Delete problem') }}</a></div>
         {% if not problem.is_manually_managed %}
             <div><a href="{{ url('problem_data', problem.code) }}">{{ _('Edit test data') }}</a></div>
