@@ -1,235 +1,343 @@
 {% extends "base.html" %}
+{# Trang cấp tài khoản, ba bước: dán danh sách -> xem bảng tổng hợp + chọn việc
+   -> thực thi. Xem hcmus/views.py:accounts_page.
 
+   Màu lấy theo chủ đề của TÀI KHOẢN (body[data-theme]) chứ không theo hệ điều
+   hành, giống các trang khác của site. Khung/nút dùng lớp sẵn có của site
+   (.table, .button) để trang không lạc lõng so với phần còn lại. #}
 {% block media %}
 <style>
-    .ta-wrap { max-width: 860px; }
-    .ta-card { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
-    .ta-card h3 { margin: 0 0 10px; font-size: .85em; text-transform: uppercase;
-                  letter-spacing: .04em; color: #888; font-weight: 600; }
-    .ta-wrap textarea { width: 100%; min-height: 150px; font-family: monospace; font-size: .95em;
-                        box-sizing: border-box; }
-    .ta-row { margin: 8px 0; }
-    .ta-row label { display: inline-block; min-width: 150px; color: #555; }
-    .ta-wrap input[type=text] { padding: 4px 6px; min-width: 260px; }
-    .ta-mode label { min-width: 0; margin-right: 20px; font-weight: 600; }
-    .ta-note { color: #777; font-size: .9em; margin: 4px 0 0; }
-    .ta-err { border-left: 4px solid #c0392b; background: #fdecea; padding: 10px 14px;
-              border-radius: 6px; margin-bottom: 14px; color: #a5281b; }
-    .ta-warn { border-left: 4px solid #d79a00; background: #fff8e6; padding: 10px 14px;
-               border-radius: 6px; margin-bottom: 14px; }
-    .ta-go { font-size: 1.05em; padding: 8px 22px; }
-    details.ta-adv summary { cursor: pointer; color: #12488f; font-weight: 600; margin-bottom: 8px; }
+    body {
+        --ta-border: #ddd;
+        --ta-muted: #777;
+        --ta-soft: rgba(0, 0, 0, .025);
+        --ta-warn-bg: #fff8e6;
+        --ta-warn-line: #d79a00;
+        --ta-err-bg: #fdecea;
+        --ta-err-line: #c0392b;
+        --ta-err-fg: #a5281b;
+        --ta-new: #1b7f3b;
+        --ta-old: #1a5f9e;
+        --ta-bad: #b23b3b;
+    }
+
+    body[data-theme="dark"] {
+        --ta-border: #444;
+        --ta-muted: #aaa;
+        --ta-soft: rgba(255, 255, 255, .04);
+        --ta-warn-bg: #3b3320;
+        --ta-warn-line: #b98a13;
+        --ta-err-bg: #3d2320;
+        --ta-err-line: #a5382c;
+        --ta-err-fg: #f0b3ab;
+        --ta-new: #6cc48c;
+        --ta-old: #8fc3e8;
+        --ta-bad: #e69a9a;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        body[data-theme="auto"] {
+            --ta-border: #444;
+            --ta-muted: #aaa;
+            --ta-soft: rgba(255, 255, 255, .04);
+            --ta-warn-bg: #3b3320;
+            --ta-warn-line: #b98a13;
+            --ta-err-bg: #3d2320;
+            --ta-err-line: #a5382c;
+            --ta-err-fg: #f0b3ab;
+            --ta-new: #6cc48c;
+            --ta-old: #8fc3e8;
+            --ta-bad: #e69a9a;
+        }
+    }
+
+    .ta-card { border: 1px solid var(--ta-border); border-radius: 6px;
+               padding: 1em 1.2em; margin-bottom: 1.1em; }
+    .ta-card h3 { margin: 0 0 .7em; font-size: 1em; }
+    .ta-note { color: var(--ta-muted); font-size: .92em; margin: .3em 0 0; }
+    .ta-warn { border-left: 3px solid var(--ta-warn-line); background: var(--ta-warn-bg);
+               padding: .7em 1em; border-radius: 4px; margin-bottom: 1.1em; }
+    .ta-err { border-left: 3px solid var(--ta-err-line); background: var(--ta-err-bg);
+              color: var(--ta-err-fg); padding: .7em 1em; border-radius: 4px;
+              margin-bottom: 1.1em; }
+    .ta-row { margin: .5em 0; }
+    .ta-row > label:first-child { display: inline-block; min-width: 11em;
+                                  color: var(--ta-muted); vertical-align: top; }
+    textarea.ta-list { width: 100%; min-height: 11em; font-family: monospace;
+                       font-size: .9em; box-sizing: border-box; }
+    .ta-tong { margin: 0 0 .8em; }
+    .ta-tong b { font-size: 1.15em; }
+    .ta-wrap { overflow-x: auto; margin-bottom: 1.2em; }
+    table.ta-tbl { width: 100%; }
+    table.ta-tbl td, table.ta-tbl th { padding: .3em .55em; white-space: nowrap; }
+    table.ta-tbl td.ta-sub { color: var(--ta-muted); font-size: .88em; }
+    .ta-new { color: var(--ta-new); font-weight: 600; }
+    .ta-old { color: var(--ta-old); }
+    .ta-bad { color: var(--ta-bad); font-weight: 600; }
+    .ta-viec label { display: block; margin: .45em 0; }
+    .ta-viec input[type=checkbox] { margin-right: .4em; }
+    .ta-sub-opt { margin: .2em 0 .9em 1.7em; }
+    .ta-go { font-size: 1.05em; padding: .45em 1.6em; }
 </style>
 {% endblock %}
 
 {% block body %}
-<div class="ta-wrap">
-
-    <div class="ta-warn">
-        Đổi mật khẩu <b>không làm thay đổi bảng xếp hạng</b> (điểm/rating/scoreboard bám vào
-        tài khoản, không phải mật khẩu). Nhưng tài khoản nào đang đăng nhập sẽ bị <b>đăng xuất</b>,
-        phải đăng nhập lại bằng mật khẩu mới — nên làm lúc <b>không có kỳ thi đang diễn ra</b>.
-        Công cụ này <b>không bao giờ đụng tài khoản quản trị</b> (staff/superuser).
-    </div>
-
     {% if error %}<div class="ta-err">{{ error }}</div>{% endif %}
 
-    <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-
-        <div class="ta-card ta-mode">
-            <h3>Chế độ</h3>
-            {% if can_create %}
-            <label><input type="radio" name="mode" value="create" checked> Tạo tài khoản mới</label>
-            {% endif %}
-            {% if can_reset %}
-            <label><input type="radio" name="mode" value="reset" {% if not can_create %}checked{% endif %}>
-                Đổi mật khẩu (tài khoản đã có)</label>
-            {% endif %}
-            <label><input type="radio" name="mode" value="slips"> Chỉ in phiếu (không tạo/đổi tài khoản)</label>
-            <p class="ta-note">
-                <b>Tạo mới:</b> username đã có thì bỏ qua; đặt luôn tên/tổ chức/email.
-                {% if can_reset %}
-                    <b>Đổi mật khẩu:</b> chỉ đổi mật khẩu tài khoản đã có, giữ nguyên mọi thứ
-                    khác; username chưa tồn tại thì bỏ qua.
-                {% endif %}
-                <b>Chỉ in phiếu:</b> không đụng tài khoản, chỉ in phiếu từ danh sách (cần có sẵn
-                cột <code>password</code>) — dùng khi tài khoản nằm ở contest/trang khác.
-            </p>
+    {# ================= BƯỚC 1: nhập danh sách ================= #}
+    {% if buoc == 1 %}
+        <div class="ta-warn">
+            Công cụ này <b>không bao giờ đụng tài khoản quản trị</b>. Đổi mật khẩu không
+            làm thay đổi điểm hay bảng xếp hạng, nhưng ai đang đăng nhập sẽ bị đăng xuất,
+            nên tránh làm lúc có kỳ thi đang chạy.
         </div>
 
-        <div class="ta-card">
-            <h3>Danh sách</h3>
-            <p class="ta-note">Mỗi dòng một tài khoản, các cột ngăn bằng dấu phẩy theo thứ tự
-                <code>username,password,name,school,email,room</code> (có dòng header cũng được).
-                Bỏ trống <code>password</code> thì hệ thống tự sinh (9 chữ số, không có 0/1).
-                Đổi mật khẩu hàng loạt thì chỉ cần cột <code>username</code>.
-                Cột <code>room</code> (phòng thi) chỉ để in lên phiếu và xếp phiếu theo phòng;
-                trống thì phiếu không in phòng.</p>
-            <textarea name="text" placeholder="team01,,HCMUS-StarterTrio,HCMUS,,Lab i52&#10;team02,,HCMUS-DoiTuongThuy,HCMUS,,Lab i61"></textarea>
-            <div class="ta-row" style="margin-top:10px">
-                <label>… hoặc tải file CSV/TXT</label>
-                <input type="file" name="file" accept=".csv,.txt,text/csv,text/plain">
-                <span class="ta-note">(tối đa 512 KB; nếu có file thì dùng file thay ô trên)</span>
-            </div>
-        </div>
-
-        <div class="ta-card">
-            <h3>Cấp quyền vào contest (tuỳ chọn)</h3>
-            <p class="ta-note">Tích contest để thêm các user trong danh sách vào
-                <b>danh sách được phép vào</b> (private_contestants) của contest riêng tư.
-                Chỉ cấp quyền vào, <b>không tạo lượt thi, không đụng scoreboard</b>; đội tự
-                bấm “Vào thi” khi contest mở. Áp dụng cho cả ba chế độ.</p>
-            {% if contests %}
-                {% for c in contests %}
-                <div class="ta-row">
-                    <label style="min-width:0">
-                        <input type="checkbox" name="contests" value="{{ c.key }}">
-                        {{ c.name }}
-                        <span class="ta-note">— {{ c.status }}{% if not c.is_private %}, KHÔNG riêng-tư-cá-nhân (cấp quyền vô tác dụng){% endif %}</span>
-                    </label>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p class="ta-note">Không có contest nào sắp mở / đang chạy / vừa xong.</p>
-            {% endif %}
-        </div>
-
-        <details class="ta-card ta-adv">
-            <summary>Tuỳ chọn thêm</summary>
-            <div class="ta-row">
-                <label>Thêm vào tổ chức (slug)</label>
-                <input type="text" name="org" placeholder="vd: hcmus lhp icpc2026">
-                <span class="ta-note">nhiều tổ chức thì ngăn bằng dấu cách</span>
-            </div>
-            <p class="ta-note" style="margin:-.2em 0 .7em">
-                Cột <code>school</code> trong CSV cũng nhận nhiều tổ chức, ngăn bằng
-                <code>;</code> — không dùng dấu phẩy vì đó là dấu ngăn cột của CSV.
-                Ví dụ: <code>HCMUS;LHP</code>. Tài khoản là mã sinh viên thì luôn được
-                thêm vào <code>hcmus</code>.
-            </p>
-            <div class="ta-row">
-                <label>Tên hiển thị = cột name</label>
-                <input type="checkbox" name="display_name" value="1">
-                <span class="ta-note">hiện tên đội/họ tên thay username trên bảng xếp hạng (tạo mới)</span>
-            </div>
-            <div class="ta-row">
-                <label>Email domain</label>
-                <input type="text" name="email_domain" placeholder="student.hcmus.edu.vn">
-                <span class="ta-note">email trống thì suy ra &lt;username&gt;@domain (tạo mới)</span>
-            </div>
-        </details>
-
-        <div class="ta-card">
-            <h3>Kích hoạt &amp; quyền</h3>
-            <div class="ta-row" style="align-items:flex-start">
-                <label><input type="checkbox" name="send_activation" checked> Gửi email kích hoạt</label>
-            </div>
-            <div id="mail-tpl">
-                <div class="ta-row"><label>Tiêu đề thư</label>
-                    <input type="text" name="mail_subject" value="{{ mail_subject_default }}"></div>
-                <div class="ta-row" style="align-items:flex-start"><label>Nội dung thư</label>
-                    <textarea name="mail_body" rows="12"
-                              style="width:100%; font-family:inherit">{{ mail_body_default }}</textarea></div>
-                <p class="ta-note" style="margin:.1em 0 .8em">
-                    Sửa thoải mái. Các chỗ <code>{ten}</code> <code>{username}</code>
-                    <code>{link}</code> <code>{site}</code> sẽ được thay bằng dữ liệu thật của
-                    từng người nhận. Nhớ giữ lại <code>{link}</code>, thiếu nó thì người dùng
-                    không có đường đặt mật khẩu.
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="ta-card">
+                <h3>Danh sách tài khoản</h3>
+                <p class="ta-note" style="margin-bottom:.6em">
+                    Mỗi dòng một người, các cột ngăn bằng dấu phẩy hoặc TAB theo thứ tự
+                    <code>username,password,name,school,email,room</code>. Có dòng tiêu đề
+                    cũng được. Bỏ trống <code>password</code> thì hệ thống tự sinh.
+                    Chỉ cần cột <code>username</code> là chạy được.
                 </p>
+                <textarea class="ta-list" name="text"
+                          placeholder="team01,,HCMUS-StarterTrio,HCMUS,,Lab i52&#10;team02,,HCMUS-DoiTuongThuy,HCMUS,,Lab i61">{{ keep_text or '' }}</textarea>
+                <div class="ta-row" style="margin-top:.8em">
+                    <label>… hoặc tải file lên</label>
+                    <input type="file" name="file" accept=".csv,.txt,text/csv,text/plain">
+                </div>
+                <div class="ta-row">
+                    <label>Tên miền email</label>
+                    <input type="text" name="email_domain" value="{{ email_domain or '' }}"
+                           placeholder="để trống nếu danh sách đã có cột email">
+                    <div class="ta-note" style="margin-left:11em">
+                        Dùng khi cả danh sách chung một tên miền. Mã số sinh viên (8 chữ số)
+                        thì tự suy ra <code>@student.hcmus.edu.vn</code>, không cần điền.
+                    </div>
+                </div>
             </div>
-            <script>
-                (function () {
-                    var cb = document.querySelector('input[name=send_activation]');
-                    var box = document.getElementById('mail-tpl');
-                    function sync() { box.style.display = cb.checked ? '' : 'none'; }
-                    cb.addEventListener('change', sync); sync();
-                })();
-            </script>
-            <p class="ta-note" style="margin:.2em 0 .8em">
-                Người dùng nhận thư kèm liên kết để <b>tự đặt mật khẩu</b> (liên kết có hạn 60 ngày).
-                Thiếu cột email thì hệ thống tự suy từ <b>mã sinh viên</b> (8 chữ số →
-                <code>&lt;mã&gt;@student.hcmus.edu.vn</code>) và tự thêm vào tổ chức HCMUS.
-                Dòng nào không có email và cũng không phải mã sinh viên thì
-                <b>cả mẻ bị dừng</b> để bạn sửa — giảng viên phải nhập email tay.
-                Email trùng với tài khoản cũ thì hệ thống <b>đổi tên đăng nhập</b> của tài
-                khoản đó thay vì tạo thêm tài khoản mới.
-            </p>
+            <button type="submit" class="button ta-go">Tiếp theo</button>
+            <p class="ta-note">Bước sau chỉ đọc danh sách và đối chiếu với hệ thống.
+                Chưa có gì được tạo hay sửa.</p>
+        </form>
+    {% endif %}
+
+    {# ================= BƯỚC 2: bảng tổng hợp + chọn việc ================= #}
+    {% if buoc == 2 %}
+        {% if qua_dai %}
+            <div class="ta-err">
+                Danh sách dài hơn {{ max_rows }} dòng. Một lần chạy chỉ nhận
+                {{ max_rows }} dòng: băm mật khẩu tốn khoảng 0,4 giây mỗi tài khoản,
+                mẻ dài hơn sẽ bị cắt giữa chừng và <b>mất luôn file mật khẩu trả về</b>
+                trong khi tài khoản vẫn được tạo. Hãy chia nhỏ danh sách.
+            </div>
+        {% endif %}
+        <p class="ta-tong">
+            Đọc được <b>{{ thong_ke.tong }}</b> dòng:
+            <span class="ta-new">{{ thong_ke.chua_co }} chưa có tài khoản</span>,
+            <span class="ta-old">{{ thong_ke.da_co }} đã có</span>,
+            {{ thong_ke.co_email }} dòng có email{% if thong_ke.van_de %},
+            <span class="ta-bad">{{ thong_ke.van_de }} dòng có vấn đề</span>{% endif %}.
+        </p>
+
+        <div class="ta-wrap">
+            <table class="table striped ta-tbl">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Tên đăng nhập</th>
+                        <th>Họ tên</th>
+                        <th>Email</th>
+                        <th>Đơn vị</th>
+                        <th>Phòng</th>
+                        <th>Tình trạng</th>
+                        {% if may_edit_accounts %}
+                            <th>Tài khoản đang có trên hệ thống</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for it in items %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td><code>{{ it.username }}</code></td>
+                            <td>{{ it.name }}</td>
+                            <td>{{ it.email }}</td>
+                            <td>{{ it.school }}</td>
+                            <td>{{ it.room }}</td>
+                            <td class="{% if it.tinh_trang == 'chua-co' %}ta-new{% elif it.tinh_trang in ('da-co-ten', 'da-co-email') %}ta-old{% else %}ta-bad{% endif %}">
+                                {{ it.nhan }}
+                            </td>
+                            {% if may_edit_accounts %}
+                            <td class="ta-sub">
+                                {% if it.hien_co %}
+                                    <code>{{ it.hien_co.username }}</code>
+                                    {% if it.hien_co.name %} · {{ it.hien_co.name }}{% endif %}
+                                    {% if it.hien_co.email %} · {{ it.hien_co.email }}{% endif %}
+                                    {% if it.hien_co.orgs %} · {{ it.hien_co.orgs }}{% endif %}
+                                    {% if it.hien_co.is_staff %} · <b>nhân viên</b>{% endif %}
+                                    {% if it.hien_co.groups %} · {{ it.hien_co.groups }}{% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="buoc" value="chay">
+            <input type="hidden" name="email_domain" value="{{ email_domain or '' }}">
+            <textarea name="text" style="display:none">{{ keep_text }}</textarea>
+
+            <div class="ta-card ta-viec">
+                <h3>Chọn việc cần làm</h3>
+                <p class="ta-note" style="margin:0 0 .6em">
+                    Mặc định không tích gì. Tích cái nào thì chỉ cái đó chạy.
+                </p>
+
+                <label><input type="checkbox" name="do_create"
+                              {% if da_chon and da_chon.get('do_create') %}checked{% endif %}>
+                    <b>Tạo các tài khoản chưa có</b>
+                    <span class="ta-note">({{ thong_ke.chua_co }} dòng)</span></label>
+
+                {% if may_edit_accounts %}
+                    <label><input type="checkbox" name="do_update"
+                                  {% if da_chon and da_chon.get('do_update') %}checked{% endif %}>
+                        <b>Cập nhật tài khoản đã có</b>
+                        <span class="ta-note">(họ tên, đơn vị, nhóm quyền, và đổi tên đăng
+                            nhập về đúng tên trong danh sách — {{ thong_ke.da_co }} dòng).
+                            Dòng nào có email MỚI khác email đang lưu thì email bị ghi đè và
+                            <b>mật khẩu cũ bị huỷ</b>, nên tích kèm "gửi thư kích hoạt" hoặc
+                            "đổi mật khẩu" để người đó còn đường vào.</span></label>
+
+                    <label><input type="checkbox" name="do_reset"
+                                  {% if da_chon and da_chon.get('do_reset') %}checked{% endif %}>
+                        <b>Đổi mật khẩu các tài khoản đã có</b>
+                        <span class="ta-note">({{ thong_ke.da_co }} dòng)</span></label>
+                {% else %}
+                    <p class="ta-note">
+                        Bạn chỉ tạo được tài khoản mới. Sửa thông tin hay đổi mật khẩu tài
+                        khoản đã có cần quyền quản trị tài khoản, nên {{ thong_ke.da_co }}
+                        dòng đã có sẽ bị bỏ qua.
+                    </p>
+                {% endif %}
+
+                <label><input type="checkbox" name="send_activation" id="ta-mail"
+                              {% if da_chon and da_chon.get('send_activation') %}checked{% endif %}>
+                    <b>Gửi thư để người dùng tự đặt mật khẩu</b>
+                    <span class="ta-note">({{ thong_ke.co_email }} dòng có email; dòng nào
+                        không suy ra được email thì cả mẻ bị chặn)</span></label>
+                <div class="ta-sub-opt" id="ta-mail-opts">
+                    {% if not may_edit_accounts %}
+                        <p class="ta-note">Thư dùng bản nháp mặc định của hệ thống. Sửa nội
+                            dung thư cần quyền quản trị tài khoản, vì thư đi từ tên miền của
+                            trường.</p>
+                    {% else %}
+                    <div class="ta-row"><label>Tiêu đề thư</label>
+                        <input type="text" name="mail_subject" size="52"
+                               value="{{ mail_subject_default }}"></div>
+                    <div class="ta-row"><label>Nội dung</label>
+                        <textarea name="mail_body" rows="8" style="width:34em; font-family:monospace; font-size:.88em">{{ mail_body_default }}</textarea>
+                        <div class="ta-note" style="margin-left:11em">
+                            Thay được: <code>{ten}</code> <code>{username}</code>
+                            <code>{link}</code> <code>{site}</code>. Link dùng được 60 ngày.
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <label><input type="checkbox" name="want_slips" id="ta-slips"
+                              {% if da_chon and da_chon.get('want_slips') %}checked{% endif %}>
+                    <b>Tạo và tải về phiếu đăng nhập, thẻ đeo, bảng tên</b>
+                    <span class="ta-note">(phiếu chỉ in được dòng có mật khẩu mới, tức là
+                        vừa tạo hoặc vừa đổi mật khẩu)</span></label>
+                <div class="ta-sub-opt" id="ta-slip-opts">
+                    <div class="ta-row"><label>Tiêu đề</label>
+                        <input type="text" name="slip_title" placeholder="FIT-HCMUS Online Judge"></div>
+                    <div class="ta-row"><label>Dòng phụ (kỳ thi)</label>
+                        <input type="text" name="slip_contest" placeholder="2026 Training Camp #01"></div>
+                    <div class="ta-row"><label>Địa chỉ đăng nhập</label>
+                        <input type="text" name="slip_url" value="{{ default_url }}"></div>
+                    <div class="ta-row"><label>Thẻ đeo mỗi đội</label>
+                        <input type="number" name="badge_copies" value="3" min="1" max="10"
+                               style="width:5em"></div>
+                </div>
+            </div>
+
+            {% if contests %}
+                <div class="ta-card">
+                    <h3>Cấp quyền vào kỳ thi</h3>
+                    <p class="ta-note" style="margin:0 0 .5em">
+                        Chỉ thêm vào danh sách được phép dự thi. Không tạo lượt thi, không
+                        đụng bảng xếp hạng.
+                    </p>
+                    {% for c in contests %}
+                        <label style="display:block; margin:.25em 0">
+                            <input type="checkbox" name="contests" value="{{ c.key }}"
+                                   {% if da_chon and c.key in da_chon.getlist('contests') %}checked{% endif %}>
+                            {{ c.name }} <span class="ta-note">({{ c.key }} · {{ c.status }})</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
             {% if grantable_groups or is_staff_creator %}
-                <div class="ta-row" style="align-items:flex-start">
-                    <label>Quyền cho tài khoản mới</label>
+                <div class="ta-card">
+                    <h3>Quyền cho tài khoản</h3>
                     <div>
                         {% if is_staff_creator %}
-                            <label style="display:inline-block; margin:0 1em .3em 0">
+                            <label style="display:inline-block; margin:0 1.2em .3em 0">
                                 <input type="checkbox" name="make_staff"> <b>Tình trạng nhân viên</b>
+                                <span class="ta-note">(chỉ áp cho tài khoản mới tạo)</span>
                             </label>
                         {% endif %}
                         {% for g in grantable_groups %}
-                            <label style="display:inline-block; margin:0 1em .3em 0">
-                                <input type="checkbox" name="groups" value="{{ g.name }}"> {{ g.name }}
+                            <label style="display:inline-block; margin:0 1.2em .3em 0">
+                                <input type="checkbox" name="groups" value="{{ g.name }}"
+                                       {% if da_chon and g.name in da_chon.getlist('groups') %}checked{% endif %}> {{ g.name }}
                             </label>
                         {% endfor %}
                     </div>
+                    <p class="ta-note">
+                        Danh sách chỉ gồm các nhóm <b>bạn đang thuộc</b>, vì không ai cấp được
+                        quyền mình không có. Không tích gì = tài khoản thường.
+                    </p>
                 </div>
-                <p class="ta-note" style="margin:.2em 0 0">
-                    Không tích gì = tài khoản thường. Danh sách chỉ gồm các nhóm
-                    <b>bạn đang thuộc</b>, vì không ai cấp được quyền mình không có.
-                    {% if is_staff_creator %}
-                        "Tình trạng nhân viên" cho phép vào trang quản trị và vào
-                        chính trang này.
-                    {% endif %}
-                </p>
             {% endif %}
-        </div>
 
-        <div class="ta-card">
-            <h3>Phiếu đăng nhập (PDF)</h3>
-            <div class="ta-row" style="align-items:flex-start">
-                <label><input type="checkbox" name="want_slips" id="want-slips">
-                    Tạo &amp; tải về phiếu đăng nhập, thẻ đeo, bảng tên</label>
+            <div class="ta-card">
+                <h3>Tuỳ chọn khác</h3>
+                <div class="ta-row"><label>Thêm vào tổ chức</label>
+                    <input type="text" name="org" placeholder="slug, ngăn bằng dấu cách">
+                </div>
+                <label style="display:block; margin-top:.4em">
+                    <input type="checkbox" name="display_name"> Đặt họ tên làm tên hiển thị
+                </label>
             </div>
-            <p class="ta-note" style="margin:.1em 0 .8em">
-                Mặc định TẮT. Không tích thì chỉ tạo tài khoản, gửi thư và cấp quyền vào
-                kỳ thi — nhanh hơn nhiều khi chạy vài trăm người.
-            </p>
-            <div id="slip-opts">
-            <div class="ta-row"><label>Tiêu đề</label>
-                <input type="text" name="slip_title" placeholder="FIT-HCMUS Online Judge"></div>
-            <div class="ta-row"><label>Dòng phụ (kỳ thi)</label>
-                <input type="text" name="slip_contest" placeholder="2026 Training Camp #01"></div>
-            <div class="ta-row"><label>Địa chỉ đăng nhập</label>
-                <input type="text" name="slip_url" value="{{ default_url }}"></div>
-            <div class="ta-row"><label>Thẻ đeo mỗi đội</label>
-                <input type="number" name="badge_copies" value="3" min="1" max="10"
-                       style="width:5em"></div>
-            </div>
-            <script>
-                (function () {
-                    var cb = document.getElementById('want-slips');
-                    var box = document.getElementById('slip-opts');
+
+            <button type="submit" class="button ta-go">Thực thi</button>
+            <button type="submit" name="buoc" value="sua" class="button"
+                    style="margin-left:.6em">Quay lại sửa danh sách</button>
+            <p class="ta-note">Chạy xong trả về một file ZIP: <code>tai-khoan.csv</code>
+                (mật khẩu mới + trạng thái từng dòng) và các PDF nếu có tích in.</p>
+        </form>
+
+        <script>
+            (function () {
+                function gan(cbId, boxId) {
+                    var cb = document.getElementById(cbId), box = document.getElementById(boxId);
+                    if (!cb || !box) return;
                     function sync() { box.style.display = cb.checked ? '' : 'none'; }
                     cb.addEventListener('change', sync); sync();
-                })();
-            </script>
-            <p class="ta-note" style="margin:.4em 0 0">
-                Gói tải về có thêm <b>the-deo-ten.pdf</b> (bìa đeo 10×7,5 cm, cắt theo
-                viền đứt) và <b>bang-ten-ban.pdf</b> (A4 ngang, gấp đôi thành bảng tên
-                dựng trên bàn — hai mặt đều đọc được). Tên kỳ thi lấy từ ô "Dòng phụ".
-            </p>
-        </div>
-
-        {% if not may_edit_accounts %}
-            <p class="ta-note" style="border-left:3px solid #f0a1a1; padding-left:.7em">
-                Bạn được <b>tạo tài khoản mới</b>, in phiếu và cấp quyền vào kỳ thi.
-                Dòng nào trùng email hoặc trùng tên đăng nhập với tài khoản đã có sẽ bị
-                <b>bỏ qua</b> — sửa thông tin tài khoản người khác cần quyền quản trị
-                tài khoản.
-            </p>
-        {% endif %}
-        <button type="submit" class="button ta-go">Chạy</button>
-        <p class="ta-note">Bấm xong hệ thống chạy trên server rồi trả về một file ZIP gồm
-            <code>tai-khoan.csv</code> (kèm mật khẩu mới + trạng thái từng dòng) và
-            <code>phieu-dang-nhap.pdf</code> (2 cột × 4 phiếu/trang A4, có viền cắt).</p>
-    </form>
-</div>
+                }
+                gan('ta-mail', 'ta-mail-opts');
+                gan('ta-slips', 'ta-slip-opts');
+            })();
+        </script>
+    {% endif %}
 {% endblock %}

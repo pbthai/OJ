@@ -571,7 +571,12 @@ def _may_manage_accounts(user):
 
 
 def _may_edit_accounts(user):
-    """Được SỬA tài khoản đã tồn tại: đổi tên đăng nhập, ghi đè email, đổi mật
+    """Được SỬA tài khoản đã tồn tại, và xem được thông tin tài khoản người khác.
+
+    KHÔNG gác cờ 'nhân viên': nhân viên cấp cờ nhân viên là ngang cấp, xem
+    _may_manage_accounts.
+
+    Được SỬA tài khoản đã tồn tại: đổi tên đăng nhập, ghi đè email, đổi mật
     khẩu, đổi họ tên/tổ chức/quyền của người khác — và cấp cờ 'nhân viên'.
 
     Nhân viên thường chỉ tạo mới được. Sửa thông tin tài khoản người khác là việc
@@ -597,6 +602,20 @@ def _grantable_groups(user):
     return list(user.groups.order_by('name'))
 
 
+def _grantable_orgs(user):
+    """Các tổ chức mà `user` được phép gắn cho tài khoản khác.
+
+    Cùng luật với _grantable_groups: không ai cấp được thứ mình không có. Thành
+    viên tổ chức trên DMOJ thấy được contest/bài đặt riêng tư theo tổ chức, nên
+    tự nhét người vào tổ chức bất kỳ là một đường vòng để mở nội dung riêng tư.
+    """
+    from judge.models import Organization
+    if user.is_superuser:
+        return list(Organization.objects.all())
+    qs = Organization.objects.filter(Q(admins=user.profile) | Q(member=user.profile))
+    return list(qs.distinct())
+
+
 def _eligible_contests(user):
     """Contest để tích chọn cấp quyền vào: sắp mở / đang chạy / vừa xong, và người
     dùng có quyền sửa. Trả về list dict cho template."""
@@ -618,55 +637,57 @@ def _eligible_contests(user):
 
 
 def accounts_page(request):
-    from hcmus import accounts as acc_mod
-    """Trang quản trị: dán CSV/text hoặc tải file, chọn tạo-mới / đổi-mật-khẩu,
-    bấm một nút -> chạy trên server -> trả về file ZIP gồm CSV mật khẩu + PDF phiếu.
+    """Trang cấp tài khoản, chạy theo BA BƯỚC.
 
-    Gác quyền: _may_manage_accounts (tạo mới, in phiếu) / _may_edit_accounts (đổi
-    mật khẩu, sửa tài khoản đã có). Lõi ở accounts.run_batch còn chặn cứng không
-    đụng tài khoản quản trị.
+      1. Dán danh sách hoặc tải file lên, bấm "Tiếp theo".
+      2. Trang hiện BẢNG TỔNG HỢP: từng dòng đọc được là ai, đã có tài khoản chưa,
+         email nào, tổ chức nào. Kéo xuống mới tới các ô chọn việc — mặc định
+         KHÔNG tích gì. Chọn xong bấm "Thực thi".
+      3. Chạy thật, trả về ZIP gồm CSV kết quả (+ PDF nếu có tích in).
 
-    Hai cờ can_create/can_reset phải bám đúng hai hàm đó. Có thời chúng bám vào
-    auth.add_user/auth.change_user, mà hai quyền Django này không cấp cho ai (xem
-    docs/10) — thành ra nhân viên vào trang chỉ thấy mỗi mục in phiếu."""
+    Vì sao tách bước: trước đây dán xong bấm một nút là chạy luôn, người chạy chỉ
+    biết mẻ vừa rồi đụng vào cái gì khi đọc cột trạng thái — lúc đó đã muộn. Bảng
+    tổng hợp cho họ thấy trước, và vì mặc định không tích gì nên bấm nhầm thì
+    không có gì xảy ra.
+
+    Gác quyền: _may_manage_accounts (vào trang, tạo mới, in phiếu) và
+    _may_edit_accounts (sửa/đổi mật khẩu tài khoản đã có). Lõi ở accounts.run_batch
+    còn chặn cứng không đụng tài khoản quản trị. Hai cờ này phải bám đúng hai hàm
+    đó; có thời chúng bám vào auth.add_user/auth.change_user, mà hai quyền Django
+    này không cấp cho ai (xem docs/10), thành ra nhân viên vào trang chỉ thấy mỗi
+    mục in phiếu.
+    """
+    import io
+    import zipfile
+
+    from hcmus import accounts as acc
+
     if not _may_manage_accounts(request.user):
         raise PermissionDenied()
 
+    may_edit = _may_edit_accounts(request.user)
     ctx = {
-        'title': _('Bulk accounts'),
-        'can_create': True,     # tới được đây nghĩa là đã qua _may_manage_accounts
-        'can_reset': _may_edit_accounts(request.user),
+        'title': 'Cấp tài khoản',
+        'buoc': 1,
         'default_url': request.build_absolute_uri('/').rstrip('/'),
         'contests': _eligible_contests(request.user),
         'grantable_groups': _grantable_groups(request.user),
-        'may_edit_accounts': _may_edit_accounts(request.user),
+        'may_edit_accounts': may_edit,
         # Cấp được cờ nhân viên: chính mình là nhân viên (ngang cấp).
         'is_staff_creator': request.user.is_staff,
-        'mail_subject_default': acc_mod.DEFAULT_MAIL_SUBJECT,
-        'mail_body_default': acc_mod.DEFAULT_MAIL_BODY,
+        'mail_subject_default': acc.DEFAULT_MAIL_SUBJECT,
+        'mail_body_default': acc.DEFAULT_MAIL_BODY,
     }
 
     if request.method != 'POST':
         return render(request, 'hcmus/accounts.html', ctx)
 
-    import io
-    import zipfile
-
-    from hcmus import accounts as acc
-    from hcmus import badges, slips
-
-    mode = request.POST.get('mode', 'create')
-    if mode not in ('create', 'reset', 'slips'):
-        mode = 'create'
-    # slips = chỉ in phiếu, KHÔNG đụng DB (dùng khi tài khoản nằm ở contest/trang
-    # khác). Chỉ cần quyền mở trang; create/reset mới cần quyền ghi tài khoản.
-    if mode in ('create', 'reset'):
-        # 'reset' là đổi mật khẩu người khác -> phải có quyền quản trị tài khoản.
-        if mode == 'reset' and not _may_edit_accounts(request.user):
-            raise PermissionDenied()
-
-    # Nguồn dữ liệu: ưu tiên file tải lên, không thì ô dán text.
+    # --- Nguồn dữ liệu: file tải lên, hoặc ô dán text, hoặc ô ẩn mang từ bước 1 ---
     text = ''
+    # Giữ lại phần đã gõ TRƯỚC mọi đường thoát sớm, nếu không người dùng vừa dán
+    # 700 dòng vừa chọn nhầm file to là mất sạch.
+    ctx['keep_text'] = request.POST.get('text', '')
+    ctx['email_domain'] = request.POST.get('email_domain', '').strip()
     upload = request.FILES.get('file')
     if upload is not None:
         if upload.size > 512 * 1024:
@@ -684,49 +705,103 @@ def accounts_page(request):
         ctx['error'] = _('Chưa có dữ liệu: dán danh sách vào ô hoặc tải file lên.')
         return render(request, 'hcmus/accounts.html', ctx)
 
-    if mode == 'slips':
-        # Không tạo/đổi gì: đọc thẳng danh sách rồi in phiếu (cần có sẵn password).
-        results = acc.parse_rows(text)
-        for r in results:
-            r['status'] = 'chỉ in phiếu'
-    else:
+    ctx['keep_text'] = text
+    email_domain = request.POST.get('email_domain', '').strip()
+    ctx['email_domain'] = email_domain
+    may_reveal = may_edit      # xem được thông tin tài khoản người khác hay không
+
+    # Bấm "Quay lại sửa danh sách": về bước 1 nhưng GIỮ nguyên phần đã dán.
+    if request.POST.get('buoc') == 'sua':
+        return render(request, 'hcmus/accounts.html', ctx)
+
+    # --- Bước 2: đọc thử rồi hiện bảng, KHÔNG ghi gì vào DB ---
+    if request.POST.get('buoc') != 'chay':
+        items = acc.preview_rows(text, email_domain, reveal=may_reveal)
+        if not items:
+            ctx['error'] = _('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
+            return render(request, 'hcmus/accounts.html', ctx)
+        ctx.update(buoc=2, items=items, thong_ke=acc.thong_ke(items),
+                   email_domain=email_domain, max_rows=acc.MAX_ROWS,
+                   qua_dai=len(items) > acc.MAX_ROWS)
+        return render(request, 'hcmus/accounts.html', ctx)
+
+    # --- Bước 3: chạy thật ---
+    do_create = request.POST.get('do_create') == 'on'
+    do_update = request.POST.get('do_update') == 'on'
+    do_reset = request.POST.get('do_reset') == 'on'
+    want_slips = request.POST.get('want_slips') == 'on'
+    contest_keys = request.POST.getlist('contests')
+
+    # Không tin form: hai việc đụng tài khoản đã có luôn phải qua quyền thật.
+    if (do_update or do_reset) and not may_edit:
+        raise PermissionDenied()
+    # Tuỳ chọn kèm theo chỉ có tác dụng khi đã chọn một VIỆC. Tích mỗi tuỳ chọn
+    # rồi bấm thì phải báo đúng lý do, đừng nói "chưa tích gì" trong khi họ vừa tích.
+    co_viec = do_create or do_update or do_reset or want_slips or contest_keys
+    kem_theo = (request.POST.get('send_activation') == 'on'
+                or request.POST.get('make_staff') == 'on'
+                or request.POST.getlist('groups')
+                or request.POST.get('org', '').strip())
+    if not co_viec:
+        loi = (_('Những ô bạn tích (gửi thư, nhóm quyền, tổ chức, cờ nhân viên) chỉ '
+                 'chạy kèm một việc. Hãy tích thêm "tạo", "cập nhật", "đổi mật khẩu", '
+                 '"in phiếu" hoặc một kỳ thi.') if kem_theo
+               else _('Chưa chọn việc nào. Tích ít nhất một ô rồi bấm lại.'))
+        ctx.update(buoc=2, items=acc.preview_rows(text, email_domain, reveal=may_edit),
+                   email_domain=email_domain, error=loi, max_rows=acc.MAX_ROWS,
+                   da_chon=request.POST)
+        ctx['thong_ke'] = acc.thong_ke(ctx['items'])
+        return render(request, 'hcmus/accounts.html', ctx)
+
+    if do_create or do_update or do_reset:
         # Chỉ nhận những nhóm mà CHÍNH người này được phép cấp — không tin POST.
         allowed = {g.name: g for g in _grantable_groups(request.user)}
         chosen = [allowed[n] for n in request.POST.getlist('groups') if n in allowed]
-        send_activation = request.POST.get('send_activation') == 'on'
-        may_edit = _may_edit_accounts(request.user)
         try:
             results = acc.run_batch(
-                text, mode,
+                text,
                 org_slug=request.POST.get('org', '').strip(),
                 display_name=bool(request.POST.get('display_name')),
-                email_domain=request.POST.get('email_domain', '').strip(),
-                send_activation=send_activation,
+                email_domain=email_domain,
+                send_activation=request.POST.get('send_activation') == 'on',
                 base_url=ctx['default_url'],
                 groups=chosen,
-                mail_subject=request.POST.get('mail_subject', '').strip(),
-                mail_body=request.POST.get('mail_body', ''),
+                # Nội dung thư đi từ tên miền của trường. Nhân viên thường chỉ
+                # được gửi bản nháp mặc định; cho sửa tự do thì trang này thành
+                # công cụ gửi thư giả mạo có kèm link thật của site.
+                mail_subject=(request.POST.get('mail_subject', '').strip()
+                              if may_edit else ''),
+                mail_body=(request.POST.get('mail_body', '') if may_edit else ''),
                 may_update=may_edit,
                 # Nhân viên cấp được cờ nhân viên: ngang cấp mình, không phải leo
                 # quyền. Cùng luật với _grantable_groups — cho được thứ mình đang
                 # có, không cho được thứ cao hơn. Cờ superuser thì không đường nào
                 # cấp qua trang này.
                 make_staff=request.POST.get('make_staff') == 'on',
+                do_create=do_create, do_update=do_update, do_reset=do_reset,
+                allowed_orgs=_grantable_orgs(request.user),
+                # Tạo tổ chức MỚI trên site là việc của quản trị, không phải của
+                # một trang cấp tài khoản.
+                may_create_org=request.user.is_superuser,
             )
         except ValueError as e:
-            # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Hiện thành cảnh
-            # báo trên trang, giữ nguyên nội dung người dùng đã dán để họ sửa.
-            ctx['error'] = str(e)
-            ctx['keep_text'] = text
+            # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Quay lại bảng
+            # tổng hợp để họ sửa, giữ nguyên dữ liệu đã dán.
+            ctx.update(buoc=2, items=acc.preview_rows(text, email_domain, reveal=may_edit),
+                       email_domain=email_domain, error=str(e), max_rows=acc.MAX_ROWS,
+                       da_chon=request.POST)
+            ctx['thong_ke'] = acc.thong_ke(ctx['items'])
             return render(request, 'hcmus/accounts.html', ctx)
-    if not results:
-        ctx['error'] = _('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
-        return render(request, 'hcmus/accounts.html', ctx)
+    else:
+        # Không tích việc nào đụng tài khoản: chỉ in phiếu / cấp quyền vào kỳ thi.
+        # Cần sẵn cột password trong danh sách thì phiếu mới có gì để in.
+        results = acc.parse_rows(text)
+        for r in results:
+            r['status'] = 'chỉ in phiếu / cấp quyền'
 
-    # Cấp quyền vào contest được tích (private_contestants) — mọi chế độ đều có.
+    # Cấp quyền vào contest được tích (private_contestants).
     # Chỉ thêm quyền vào, KHÔNG tạo lượt thi, KHÔNG đụng scoreboard.
     contest_note = ''
-    contest_keys = request.POST.getlist('contests')
     if contest_keys:
         from judge.models import Contest
         contests = [c for c in Contest.objects.filter(key__in=contest_keys)
@@ -739,13 +814,9 @@ def accounts_page(request):
         contest_note = '\n'.join(lines) + '\n'
 
     csv_text = acc.results_csv(results)
-    # Mặc định KHÔNG tạo phiếu: phần lớn lần chạy chỉ để tạo tài khoản + gửi thư,
-    # mà dựng PDF cho vài trăm người thì chậm và ra file to không ai dùng.
-    # Mặc định KHÔNG tạo phiếu: phần lớn lần chạy chỉ để tạo tài khoản + gửi thư,
-    # mà dựng PDF cho vài trăm người thì chậm và ra file to không ai dùng tới.
-    want_slips = request.POST.get('want_slips') == 'on'
     pdf_bytes = badge_bytes = tent_bytes = None
     if want_slips:
+        from hcmus import badges, slips
         # Tên kỳ thi in trên thẻ đeo và bảng tên: lấy ô "kỳ thi" của form, không
         # có thì lấy tiêu đề phiếu.
         event_name = (request.POST.get('slip_contest', '').strip()
@@ -767,7 +838,23 @@ def accounts_page(request):
         except Exception as e:  # noqa: BLE001  thiếu font/thư viện thì vẫn trả CSV
             csv_text += f'\n# Không tạo được PDF: {e}\n'
 
+    # Tuỳ chọn tích mà không có việc nào dùng tới nó thì phải nói ra, đừng im lặng.
+    if kem_theo and not (do_create or do_update or do_reset):
+        csv_text += ('\n# Các ô "gửi thư / nhóm quyền / tổ chức / cờ nhân viên" KHÔNG chạy: '
+                     'mẻ này không tạo và không cập nhật tài khoản nào.\n')
+    if request.POST.get('make_staff') == 'on' and not do_create:
+        csv_text += ('\n# Cờ "tình trạng nhân viên" chỉ áp cho tài khoản MỚI TẠO. '
+                     'Tài khoản đã có thì đổi ở trang quản trị người dùng.\n')
+
     changed = sum(1 for r in results if r['password'])
+    # Phiếu đăng nhập chỉ in được dòng CÓ mật khẩu. Không dòng nào có thì
+    # make_slips_pdf trả None và trước đây gói ZIP lặng lẽ thiếu file PDF, người
+    # dùng tưởng hỏng. Nay nói thẳng lý do vào CSV.
+    if want_slips and pdf_bytes is None:
+        csv_text += ('\n# KHÔNG có phieu-dang-nhap.pdf: không dòng nào có mật khẩu mới.\n'
+                     '# Phiếu chỉ in được tài khoản vừa tạo hoặc vừa đổi mật khẩu.\n'
+                     '# Xem cột trạng thái ở trên để biết vì sao từng dòng bị bỏ qua.\n')
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('tai-khoan.csv', csv_text.encode('utf-8'))
@@ -775,7 +862,7 @@ def accounts_page(request):
             z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
         # Thẻ đeo + bảng tên để bàn dùng chung nguồn dữ liệu với phiếu, nên gói
         # luôn để ban tổ chức chỉ phải tải một lần. Hai thứ này chỉ cần tên đội
-        # nên chế độ chỉ-in-phiếu (không đụng mật khẩu) vẫn có.
+        # nên dòng không có mật khẩu vẫn in được.
         if badge_bytes:
             z.writestr('the-deo-ten.pdf', badge_bytes)
         if tent_bytes:
@@ -784,16 +871,12 @@ def accounts_page(request):
             z.writestr('cap-quyen-contest.txt', contest_note.encode('utf-8'))
     buf.seek(0)
     resp = HttpResponse(buf.getvalue(), content_type='application/zip')
-    prefix = {'create': 'tao-moi', 'reset': 'doi-matkhau', 'slips': 'phieu'}[mode]
-    resp['Content-Disposition'] = f'attachment; filename="{prefix}-{changed}-tk.zip"'
+    viec = ('tao' if do_create else '') + ('-sua' if do_update else '') + \
+           ('-matkhau' if do_reset else '')
+    resp['Content-Disposition'] = \
+        f'attachment; filename="{viec.strip("-") or "phieu"}-{changed}-tk.zip"'
     return resp
 
-
-# ---------------------------------------------------------------------------
-# In mã nguồn bài nộp cho thí sinh trong giờ thi (luật ICPC). Chỉ in submission
-# của chính mình, thuộc contest ĐANG diễn ra; chặn >10 trang (từ chối ngay);
-# in thẳng máy in đang chọn, không cần giám thị duyệt. Xem docs/06 §2.8.
-# ---------------------------------------------------------------------------
 
 @require_POST
 def print_submission(request, submission):
