@@ -659,9 +659,6 @@ def accounts_page(request):
     này không cấp cho ai (xem docs/10), thành ra nhân viên vào trang chỉ thấy mỗi
     mục in phiếu.
     """
-    import io
-    import zipfile
-
     from hcmus import accounts as acc
 
     if not _may_manage_accounts(request.user):

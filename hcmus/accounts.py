@@ -304,15 +304,22 @@ def render_mail(text, user, link, site_name):
 
 
 def send_activation_mail(user, base_url, subject='', body='',
-                         site_name='FIT-HCMUS Online Judge'):
-    """Gửi thư kích hoạt. subject/body để trống thì dùng bản nháp mặc định."""
+                         site_name='FIT-HCMUS Online Judge', connection=None):
+    """Gửi thư kích hoạt. subject/body để trống thì dùng bản nháp mặc định.
+
+    connection: truyền vào một kết nối SMTP đang mở để dùng lại. Không truyền thì
+    Django tự mở rồi đóng một kết nối riêng cho thư này — đo trên server, bắt tay
+    với Gmail mất 2,3 giây, nên mẻ vài trăm thư mà mỗi thư một kết nối là mất cả
+    nửa tiếng chỉ để chào hỏi.
+    """
     from django.conf import settings
     from django.core.mail import send_mail
     link = activation_link(user, base_url)
     send_mail(subject=render_mail(subject or DEFAULT_MAIL_SUBJECT, user, link, site_name),
               message=render_mail(body or DEFAULT_MAIL_BODY, user, link, site_name),
               from_email=settings.DEFAULT_FROM_EMAIL,
-              recipient_list=[user.email], fail_silently=False)
+              recipient_list=[user.email], fail_silently=False,
+              connection=connection)
     return True
 
 
@@ -608,16 +615,30 @@ def run_batch(text, mode='batch', org_slug='', display_name=False, email_domain=
     # transaction mở trong lúc chờ mạng. Thư hỏng thì ghi vào status của dòng đó,
     # tài khoản vẫn còn nguyên để gửi lại sau.
     if send_activation and to_notify:
+        from django.core.mail import get_connection
         by_name = {r['username']: r for r in results}
-        for u in to_notify:
-            try:
-                send_activation_mail(u, base_url or 'https://coding.fit.hcmus.edu.vn',
-                                     subject=mail_subject, body=mail_body)
-                if u.username in by_name:
-                    by_name[u.username]['status'] += ' +đã gửi mail'
-            except Exception as e:  # noqa: BLE001
-                if u.username in by_name:
-                    by_name[u.username]['status'] += f' | LỖI GỬI MAIL: {e}'
+        # MỘT kết nối cho cả mẻ. Bắt tay với Gmail mất 2,3 giây, mở lại cho từng
+        # thư thì 700 thư tốn gần nửa tiếng chỉ để bắt tay, lại dễ bị Gmail chặn
+        # vì mở quá nhiều kết nối liên tiếp.
+        conn = get_connection()
+        try:
+            conn.open()
+        except Exception:  # noqa: BLE001  không mở nổi thì để Django tự lo từng thư
+            conn = None
+        try:
+            for u in to_notify:
+                try:
+                    send_activation_mail(u, base_url or 'https://coding.fit.hcmus.edu.vn',
+                                         subject=mail_subject, body=mail_body,
+                                         connection=conn)
+                    if u.username in by_name:
+                        by_name[u.username]['status'] += ' +đã gửi mail'
+                except Exception as e:  # noqa: BLE001
+                    if u.username in by_name:
+                        by_name[u.username]['status'] += f' | LỖI GỬI MAIL: {e}'
+        finally:
+            if conn is not None:
+                conn.close()
 
     return results
 
@@ -843,6 +864,28 @@ def build_zip(results, contest_note='', want_slips=False, slip=None, ghi_chu='')
         if contest_note:
             z.writestr('cap-quyen-contest.txt', contest_note.encode('utf-8'))
     return buf.getvalue()
+
+
+def _tom_tat_user(user):
+    """Tóm tắt tài khoản đang có, để hiện ở cột cuối bảng bước 2.
+
+    CHỈ gọi khi người xem có quyền sửa tài khoản (xem preview_rows), vì nó lộ họ
+    tên, email, tổ chức, nhóm quyền và cờ nhân viên của người khác.
+    """
+    if user is None:
+        return None
+    try:
+        orgs = ', '.join(user.profile.organizations.values_list('slug', flat=True))
+    except Exception:  # noqa: BLE001  tài khoản không có profile thì thôi
+        orgs = ''
+    return {
+        'username': user.username,
+        'name': user.first_name,
+        'email': user.email,
+        'orgs': orgs,
+        'is_staff': user.is_staff,
+        'groups': ', '.join(user.groups.values_list('name', flat=True)),
+    }
 
 
 def thong_ke(items):
