@@ -128,10 +128,8 @@
     {% if buoc == 2 %}
         {% if qua_dai %}
             <div class="ta-err">
-                Danh sách dài hơn {{ max_rows }} dòng. Một lần chạy chỉ nhận
-                {{ max_rows }} dòng: băm mật khẩu tốn khoảng 0,4 giây mỗi tài khoản,
-                mẻ dài hơn sẽ bị cắt giữa chừng và <b>mất luôn file mật khẩu trả về</b>
-                trong khi tài khoản vẫn được tạo. Hãy chia nhỏ danh sách.
+                Danh sách dài hơn {{ max_rows }} dòng, quá mức một lần chạy nhận.
+                Hãy chia nhỏ, hoặc kiểm lại xem có dán nhầm file không.
             </div>
         {% endif %}
         <p class="ta-tong">
@@ -337,6 +335,84 @@
                 }
                 gan('ta-mail', 'ta-mail-opts');
                 gan('ta-slips', 'ta-slip-opts');
+            })();
+        </script>
+    {% endif %}
+
+    {# ================= BƯỚC 3: gói đã sẵn, việc ghi chạy nền ================= #}
+    {% if buoc == 3 %}
+        <div class="ta-card">
+            <h3>Gói mật khẩu đã sẵn sàng</h3>
+            <p>{{ so_dong }} dòng, trong đó <b>{{ so_pass }}</b> dòng có mật khẩu mới.</p>
+            <p style="margin:.8em 0">
+                <a class="button ta-go"
+                   href="{{ url('hcmus_accounts_download', token) }}">Tải gói (CSV + PDF)</a>
+            </p>
+            <p class="ta-note">
+                Mật khẩu được quyết ngay lúc bạn bấm và đã nằm trong gói này, nên tải về
+                được liền. Việc ghi vào hệ thống chạy nền bên dưới và dùng đúng bộ mật khẩu
+                đó, phiếu in không bao giờ lệch với hệ thống.
+                Gói giữ lại 7 ngày, tải lại được bằng chính đường dẫn trên.
+            </p>
+        </div>
+
+        <div class="ta-card">
+            <h3>Đang ghi vào hệ thống</h3>
+            <p id="ta-tiendo">Đang chạy…</p>
+            <div id="ta-ketqua"></div>
+            <p class="ta-note">Đóng trang này cũng không sao, việc vẫn chạy tiếp. Nhưng nếu
+                có dòng nào lỗi thì phải xem ở đây mới biết.</p>
+        </div>
+
+        <p><a href="{{ url('hcmus_accounts') }}">Chạy một mẻ khác</a></p>
+
+        <script>
+            (function () {
+                var url = "{{ url('hcmus_accounts_status', task_id) }}";
+                var tiendo = document.getElementById('ta-tiendo');
+                var ketqua = document.getElementById('ta-ketqua');
+                function ve(rows) {
+                    var loi = rows.filter(function (r) {
+                        var s = (r.status || '');
+                        return s.indexOf('LỖI') === 0 || s.indexOf('BỎ QUA') === 0 ||
+                               s.indexOf('CHƯA CÓ') === 0 || s.indexOf('ĐÃ CÓ') === 0 ||
+                               s.indexOf('KHÔNG TỒN TẠI') === 0 || s.indexOf('CẢNH BÁO') >= 0;
+                    });
+                    var h = '<p>Xong ' + rows.length + ' dòng';
+                    h += loi.length ? ', <b>' + loi.length + ' dòng cần xem lại</b>.</p>'
+                                    : ', tất cả đều chạy được.</p>';
+                    if (loi.length) {
+                        h += '<div class="ta-wrap"><table class="table striped ta-tbl"><thead><tr>' +
+                             '<th>Tên đăng nhập</th><th>Kết quả</th></tr></thead><tbody>';
+                        loi.forEach(function (r) {
+                            h += '<tr><td><code>' + r.username + '</code></td><td>' +
+                                 r.status + '</td></tr>';
+                        });
+                        h += '</tbody></table></div>';
+                    }
+                    ketqua.innerHTML = h;
+                }
+                function hoi() {
+                    fetch(url, {credentials: 'same-origin'})
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (d.state === 'SUCCESS') {
+                                tiendo.textContent = 'Đã ghi xong.';
+                                ve(d.rows || []);
+                                return;
+                            }
+                            if (d.state === 'FAILURE') {
+                                tiendo.innerHTML = '<b>Mẻ chạy hỏng:</b> ' + (d.error || '');
+                                return;
+                            }
+                            if (d.done != null && d.total) {
+                                tiendo.textContent = 'Đang chạy… ' + d.done + '/' + d.total + ' dòng';
+                            }
+                            setTimeout(hoi, 1500);
+                        })
+                        .catch(function () { setTimeout(hoi, 3000); });
+                }
+                hoi();
             })();
         </script>
     {% endif %}

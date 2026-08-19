@@ -11,6 +11,8 @@ Nhờ vậy Resolver không bao giờ đông cứng phần final theo một lầ
 """
 import json
 import os
+import re
+import secrets
 
 from django import forms
 from django.conf import settings
@@ -32,7 +34,7 @@ from hcmus.health import snapshot as health_snapshot
 from hcmus.models import (JudgeSwitch, LandingPage, PublicScoreboard, Ranking,
                           TeammatePost)
 from hcmus.ranking import compute as compute_ranking
-from hcmus.tasks import build_contest_statement
+from hcmus.tasks import build_contest_statement, run_accounts_batch
 from judge.models import Contest, ContestParticipation
 from judge.utils.celery import redirect_to_task_status
 
@@ -753,129 +755,171 @@ def accounts_page(request):
         ctx['thong_ke'] = acc.thong_ke(ctx['items'])
         return render(request, 'hcmus/accounts.html', ctx)
 
-    if do_create or do_update or do_reset:
-        # Chỉ nhận những nhóm mà CHÍNH người này được phép cấp — không tin POST.
-        allowed = {g.name: g for g in _grantable_groups(request.user)}
-        chosen = [allowed[n] for n in request.POST.getlist('groups') if n in allowed]
-        try:
-            results = acc.run_batch(
-                text,
-                org_slug=request.POST.get('org', '').strip(),
-                display_name=bool(request.POST.get('display_name')),
-                email_domain=email_domain,
-                send_activation=request.POST.get('send_activation') == 'on',
-                base_url=ctx['default_url'],
-                groups=chosen,
-                # Nội dung thư đi từ tên miền của trường. Nhân viên thường chỉ
-                # được gửi bản nháp mặc định; cho sửa tự do thì trang này thành
-                # công cụ gửi thư giả mạo có kèm link thật của site.
-                mail_subject=(request.POST.get('mail_subject', '').strip()
-                              if may_edit else ''),
-                mail_body=(request.POST.get('mail_body', '') if may_edit else ''),
-                may_update=may_edit,
-                # Nhân viên cấp được cờ nhân viên: ngang cấp mình, không phải leo
-                # quyền. Cùng luật với _grantable_groups — cho được thứ mình đang
-                # có, không cho được thứ cao hơn. Cờ superuser thì không đường nào
-                # cấp qua trang này.
-                make_staff=request.POST.get('make_staff') == 'on',
-                do_create=do_create, do_update=do_update, do_reset=do_reset,
-                allowed_orgs=_grantable_orgs(request.user),
-                # Tạo tổ chức MỚI trên site là việc của quản trị, không phải của
-                # một trang cấp tài khoản.
-                may_create_org=request.user.is_superuser,
-            )
-        except ValueError as e:
-            # Mẻ bị chặn từ đầu (thiếu email mà lại tích gửi thư). Quay lại bảng
-            # tổng hợp để họ sửa, giữ nguyên dữ liệu đã dán.
-            ctx.update(buoc=2, items=acc.preview_rows(text, email_domain, reveal=may_edit),
-                       email_domain=email_domain, error=str(e), max_rows=acc.MAX_ROWS,
-                       da_chon=request.POST)
-            ctx['thong_ke'] = acc.thong_ke(ctx['items'])
-            return render(request, 'hcmus/accounts.html', ctx)
-    else:
-        # Không tích việc nào đụng tài khoản: chỉ in phiếu / cấp quyền vào kỳ thi.
-        # Cần sẵn cột password trong danh sách thì phiếu mới có gì để in.
+    slip_opts = {
+        'title': request.POST.get('slip_title', '').strip(),
+        'contest': request.POST.get('slip_contest', '').strip(),
+        'url': request.POST.get('slip_url', '').strip() or ctx['default_url'],
+        'copies': _int_or(request.POST.get('badge_copies'), 3),
+    }
+
+    # --- Không đụng tài khoản: chỉ in phiếu / cấp quyền kỳ thi. Nhanh, chạy thẳng ---
+    if not (do_create or do_update or do_reset):
         results = acc.parse_rows(text)
         for r in results:
             r['status'] = 'chỉ in phiếu / cấp quyền'
+        ghi_chu = ''
+        if kem_theo:
+            ghi_chu = ('\n# Các ô "gửi thư / nhóm quyền / tổ chức / cờ nhân viên" KHÔNG '
+                       'chạy: mẻ này không tạo và không cập nhật tài khoản nào.\n')
+        note = _cap_quyen_contest(request.user, contest_keys, results)
+        data = acc.build_zip(results, contest_note=note, want_slips=want_slips,
+                             slip=slip_opts, ghi_chu=ghi_chu)
+        resp = HttpResponse(data, content_type='application/zip')
+        resp['Content-Disposition'] = 'attachment; filename="phieu-tk.zip"'
+        return resp
 
-    # Cấp quyền vào contest được tích (private_contestants).
-    # Chỉ thêm quyền vào, KHÔNG tạo lượt thi, KHÔNG đụng scoreboard.
-    contest_note = ''
-    if contest_keys:
-        from judge.models import Contest
-        contests = [c for c in Contest.objects.filter(key__in=contest_keys)
-                    if request.user.is_superuser or c.is_editable_by(request.user)]
-        usernames = [r['username'] for r in results if r.get('username')]
-        added = acc.add_users_to_contests(usernames, contests)
-        lines = ['Cấp quyền vào contest (private_contestants, không tạo lượt thi):']
-        for contest, n, note in added:
-            lines.append(f'  {contest.key}: +{n} user' + (f'   [{note}]' if note else ''))
-        contest_note = '\n'.join(lines) + '\n'
+    # --- Có ghi DB: sinh mật khẩu TRƯỚC, trao gói ngay, ghi DB ở chạy nền ---
+    #
+    # Băm mật khẩu tốn ~0,4 giây mỗi tài khoản nên mẻ vài trăm dòng chắc chắn vượt
+    # trần 60 giây của nginx. Trước đây hậu quả là mất trắng gói mật khẩu trong khi
+    # tài khoản vẫn được tạo. Nay mật khẩu được quyết ở đây và giao ngay cho người
+    # chạy; celery chỉ việc ghi đúng bộ mật khẩu đó vào DB.
+    try:
+        rows = acc.kiem_truoc(text, email_domain,
+                              send_activation=request.POST.get('send_activation') == 'on',
+                              do_create=do_create)
+    except ValueError as e:
+        ctx.update(buoc=2, items=acc.preview_rows(text, email_domain, reveal=may_edit),
+                   email_domain=email_domain, error=str(e), max_rows=acc.MAX_ROWS,
+                   da_chon=request.POST)
+        ctx['thong_ke'] = acc.thong_ke(ctx['items'])
+        return render(request, 'hcmus/accounts.html', ctx)
 
-    csv_text = acc.results_csv(results)
-    pdf_bytes = badge_bytes = tent_bytes = None
-    if want_slips:
-        from hcmus import badges, slips
-        # Tên kỳ thi in trên thẻ đeo và bảng tên: lấy ô "kỳ thi" của form, không
-        # có thì lấy tiêu đề phiếu.
-        event_name = (request.POST.get('slip_contest', '').strip()
-                      or request.POST.get('slip_title', '').strip()
-                      or 'FIT-HCMUS Online Judge')
-        try:
-            badge_copies = int(request.POST.get('badge_copies') or 3)
-        except ValueError:
-            badge_copies = 3
-        try:
-            pdf_bytes = slips.make_slips_pdf(
-                results,
-                title=request.POST.get('slip_title', '').strip() or 'FIT-HCMUS Online Judge',
-                contest=request.POST.get('slip_contest', '').strip(),
-                url=request.POST.get('slip_url', '').strip() or ctx['default_url'],
-            )
-            badge_bytes = badges.make_badges_pdf(results, event=event_name, copies=badge_copies)
-            tent_bytes = badges.make_tents_pdf(results, event=event_name)
-        except Exception as e:  # noqa: BLE001  thiếu font/thư viện thì vẫn trả CSV
-            csv_text += f'\n# Không tạo được PDF: {e}\n'
+    passwords = {r['username']: (r['password'] or acc.gen_pass()) for r in rows}
+    items = acc.preview_rows(text, email_domain, reveal=may_edit)
+    du_doan = acc.du_doan(items, do_create, do_update, do_reset, passwords)
 
-    # Tuỳ chọn tích mà không có việc nào dùng tới nó thì phải nói ra, đừng im lặng.
-    if kem_theo and not (do_create or do_update or do_reset):
-        csv_text += ('\n# Các ô "gửi thư / nhóm quyền / tổ chức / cờ nhân viên" KHÔNG chạy: '
-                     'mẻ này không tạo và không cập nhật tài khoản nào.\n')
+    # Chỉ nhận những nhóm mà CHÍNH người này được phép cấp — không tin POST.
+    allowed = {g.name: g for g in _grantable_groups(request.user)}
+    chosen = [n for n in request.POST.getlist('groups') if n in allowed]
+
+    ghi_chu = '\n# Gói này dựng NGAY khi bấm, việc ghi vào hệ thống chạy nền.\n'
+    ghi_chu += '# Cột trạng thái ở đây là DỰ KIẾN. Xem kết quả thật ở trang theo dõi.\n'
     if request.POST.get('make_staff') == 'on' and not do_create:
-        csv_text += ('\n# Cờ "tình trạng nhân viên" chỉ áp cho tài khoản MỚI TẠO. '
-                     'Tài khoản đã có thì đổi ở trang quản trị người dùng.\n')
+        ghi_chu += ('# Cờ "tình trạng nhân viên" chỉ áp cho tài khoản MỚI TẠO.\n')
+    data = acc.build_zip(du_doan, want_slips=want_slips, slip=slip_opts, ghi_chu=ghi_chu)
 
-    changed = sum(1 for r in results if r['password'])
-    # Phiếu đăng nhập chỉ in được dòng CÓ mật khẩu. Không dòng nào có thì
-    # make_slips_pdf trả None và trước đây gói ZIP lặng lẽ thiếu file PDF, người
-    # dùng tưởng hỏng. Nay nói thẳng lý do vào CSV.
-    if want_slips and pdf_bytes is None:
-        csv_text += ('\n# KHÔNG có phieu-dang-nhap.pdf: không dòng nào có mật khẩu mới.\n'
-                     '# Phiếu chỉ in được tài khoản vừa tạo hoặc vừa đổi mật khẩu.\n'
-                     '# Xem cột trạng thái ở trên để biết vì sao từng dòng bị bỏ qua.\n')
+    token = f'{request.user.id}-{secrets.token_urlsafe(18)}'
+    _luu_goi(token, data)
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
-        z.writestr('tai-khoan.csv', csv_text.encode('utf-8'))
-        if pdf_bytes:
-            z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
-        # Thẻ đeo + bảng tên để bàn dùng chung nguồn dữ liệu với phiếu, nên gói
-        # luôn để ban tổ chức chỉ phải tải một lần. Hai thứ này chỉ cần tên đội
-        # nên dòng không có mật khẩu vẫn in được.
-        if badge_bytes:
-            z.writestr('the-deo-ten.pdf', badge_bytes)
-        if tent_bytes:
-            z.writestr('bang-ten-ban.pdf', tent_bytes)
-        if contest_note:
-            z.writestr('cap-quyen-contest.txt', contest_note.encode('utf-8'))
-    buf.seek(0)
-    resp = HttpResponse(buf.getvalue(), content_type='application/zip')
-    viec = ('tao' if do_create else '') + ('-sua' if do_update else '') + \
-           ('-matkhau' if do_reset else '')
-    resp['Content-Disposition'] = \
-        f'attachment; filename="{viec.strip("-") or "phieu"}-{changed}-tk.zip"'
-    return resp
+    task = run_accounts_batch.delay(text, {
+        'org': request.POST.get('org', '').strip(),
+        'display_name': bool(request.POST.get('display_name')),
+        'email_domain': email_domain,
+        'send_activation': request.POST.get('send_activation') == 'on',
+        'base_url': ctx['default_url'],
+        'groups': chosen,
+        # Nội dung thư đi từ tên miền của trường. Nhân viên thường chỉ được gửi
+        # bản nháp mặc định; cho sửa tự do thì trang này thành công cụ gửi thư
+        # giả mạo có kèm link thật của site.
+        'mail_subject': request.POST.get('mail_subject', '').strip() if may_edit else '',
+        'mail_body': request.POST.get('mail_body', '') if may_edit else '',
+        'may_update': may_edit,
+        'make_staff': request.POST.get('make_staff') == 'on',
+        'do_create': do_create, 'do_update': do_update, 'do_reset': do_reset,
+        'allowed_orgs': [o.pk for o in _grantable_orgs(request.user)],
+        # Tạo tổ chức MỚI trên site là việc của quản trị, không phải của một trang
+        # cấp tài khoản.
+        'may_create_org': request.user.is_superuser,
+        'passwords': passwords,
+        'contests': [c.key for c in _contest_objs(request.user, contest_keys)],
+    })
+
+    ctx.update(buoc=3, token=token, task_id=task.id, du_doan=du_doan,
+               so_dong=len(rows), so_pass=sum(1 for r in du_doan if r['password']))
+    return render(request, 'hcmus/accounts.html', ctx)
+
+
+def _int_or(value, mac_dinh):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return mac_dinh
+
+
+def _goi_dir():
+    d = getattr(settings, 'HCMUS_ACCOUNT_CACHE',
+                os.path.join(os.path.expanduser('~'), 'account-batches'))
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _luu_goi(token, data):
+    """Ghi gói ZIP xuống đĩa để tải lại được, và dọn gói cũ hơn 7 ngày."""
+    import time
+    d = _goi_dir()
+    with open(os.path.join(d, f'{token}.zip'), 'wb') as f:
+        f.write(data)
+    han = time.time() - 7 * 86400
+    for ten in os.listdir(d):
+        duong = os.path.join(d, ten)
+        if ten.endswith('.zip') and os.path.getmtime(duong) < han:
+            os.remove(duong)
+
+
+def _contest_objs(user, keys):
+    if not keys:
+        return []
+    return [c for c in Contest.objects.filter(key__in=keys)
+            if user.is_superuser or c.is_editable_by(user)]
+
+
+def _cap_quyen_contest(user, keys, results):
+    """Cấp quyền vào contest (private_contestants). Chỉ THÊM quyền, KHÔNG tạo lượt
+    thi, KHÔNG đụng bảng xếp hạng."""
+    from hcmus import accounts as acc
+    contests = _contest_objs(user, keys)
+    if not contests:
+        return ''
+    usernames = [r['username'] for r in results if r.get('username')]
+    added = acc.add_users_to_contests(usernames, contests)
+    lines = ['Cấp quyền vào contest (private_contestants, không tạo lượt thi):']
+    for contest, n, note in added:
+        lines.append(f'  {contest.key}: +{n} user' + (f'   [{note}]' if note else ''))
+    return '\n'.join(lines) + '\n'
+
+
+def accounts_download(request, token):
+    """Tải lại gói mật khẩu đã dựng. Token gắn với người tạo ra nó."""
+    if not _may_manage_accounts(request.user):
+        raise PermissionDenied()
+    if not re.fullmatch(r'\d+-[A-Za-z0-9_-]{10,64}', token or ''):
+        raise Http404()
+    if token.split('-', 1)[0] != str(request.user.id):
+        raise PermissionDenied()
+    duong = os.path.join(_goi_dir(), f'{token}.zip')
+    if not os.path.exists(duong):
+        raise Http404()
+    return FileResponse(open(duong, 'rb'), as_attachment=True,
+                        filename='tai-khoan.zip', content_type='application/zip')
+
+
+def accounts_status(request, task_id):
+    """Tiến độ + kết quả thật của mẻ đang chạy nền, cho trang kết quả gọi bằng JS."""
+    if not _may_manage_accounts(request.user):
+        raise PermissionDenied()
+    from celery.result import AsyncResult
+    res = AsyncResult(task_id)
+    out = {'state': res.state}
+    if res.state == 'PROGRESS' and isinstance(res.info, dict):
+        out.update(done=res.info.get('done'), total=res.info.get('total'))
+    elif res.state == 'SUCCESS':
+        rows = res.result or []
+        out['rows'] = [{'username': r.get('username'), 'status': r.get('status')}
+                       for r in rows]
+    elif res.state == 'FAILURE':
+        out['error'] = str(res.info)
+    return JsonResponse(out)
 
 
 @require_POST

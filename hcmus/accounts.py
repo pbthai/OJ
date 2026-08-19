@@ -44,14 +44,14 @@ COLS = ['username', 'password', 'name', 'school', 'email', 'room']
 # và tab: dán nhầm định dạng thì cả dòng thành một "tên đăng nhập" khổng lồ.
 USERNAME_RE = re.compile(r'^[\w.@+-]+$')
 
-# Chốt số dòng cho một lần chạy. Băm mật khẩu của Django cố tình chậm (~0,4 giây
-# mỗi tài khoản), 150 dòng đã chạm ngưỡng 60 giây của nginx. Quá ngưỡng thì
-# request bị cắt NHƯNG tài khoản vẫn được tạo tiếp ở phía sau, và file mật khẩu
-# trả về thì mất — không ai biết mật khẩu của những tài khoản vừa tạo.
-MAX_ROWS = 100
+# Chốt số dòng cho một lần chạy. Không còn là ngưỡng timeout: việc ghi DB đã đẩy
+# sang celery, còn phần chạy trong request chỉ là dựng gói ZIP (đo trên server:
+# 800 dòng hết 2,7 giây). Con số này giờ chỉ để chặn mẻ vô lý, ví dụ dán nhầm cả
+# một file log vào ô. 1000 dòng đủ cho kỳ ICPC ~700 đội trong một lần chạy.
+MAX_ROWS = 1000
 
 
-def _trung_trong_me(rows, email_domain=''):
+def trung_trong_me(rows, email_domain=''):
     """Các dòng trùng tên đăng nhập hoặc trùng email NGAY TRONG danh sách nhập.
 
     Phải chặn trước khi chạy: hai dòng cùng email sẽ lần lượt đổi tên cùng một tài
@@ -71,6 +71,36 @@ def _trung_trong_me(rows, email_domain=''):
             else:
                 thay_mail[mail] = i
     return loi
+
+
+def kiem_truoc(text, email_domain='', send_activation=False, do_create=False):
+    """Các phép kiểm phải chạy TRƯỚC khi đẩy mẻ sang chạy nền.
+
+    Chạy nền thì lỗi không quay về được màn hình người dùng nữa, nên mọi thứ có
+    thể chặn cả mẻ đều phải chặn ngay ở đây. Ném ValueError kèm lý do.
+    """
+    rows = parse_rows(text)
+    if not rows:
+        raise ValueError('Không đọc được dòng hợp lệ nào (cần ít nhất cột username).')
+    if len(rows) > MAX_ROWS:
+        raise ValueError(
+            f'Danh sách có {len(rows)} dòng, quá {MAX_ROWS} dòng cho một lần chạy. '
+            'Hãy chia nhỏ danh sách.')
+    trung = trung_trong_me(rows, email_domain)
+    if trung:
+        raise ValueError(
+            'Danh sách có dòng trùng nhau, sửa rồi chạy lại (chạy tiếp sẽ đổi tên một '
+            'tài khoản nhiều lần và in ra phiếu đã chết): ' + '; '.join(trung[:5])
+            + ('...' if len(trung) > 5 else ''))
+    if send_activation and do_create:
+        thieu = rows_without_email(rows, email_domain)
+        if thieu:
+            raise ValueError(
+                'Đã tích "gửi email kích hoạt" nhưng {} dòng không có email và cũng '
+                'không phải mã sinh viên (8 chữ số): {}. Giảng viên không đoán được '
+                'email từ tên đăng nhập nên phải nhập tay. Chưa tạo tài khoản nào.'
+                .format(len(thieu), ', '.join(thieu[:10]) + ('...' if len(thieu) > 10 else '')))
+    return rows
 
 
 def gen_pass():
@@ -321,7 +351,7 @@ def run_batch(text, mode='batch', org_slug='', display_name=False, email_domain=
               send_activation=False, base_url='', groups=(),
               mail_subject='', mail_body='', may_update=True, make_staff=False,
               do_create=None, do_update=None, do_reset=None,
-              allowed_orgs=None, may_create_org=False):
+              allowed_orgs=None, may_create_org=False, passwords=None):
     """Chạy một mẻ thao tác tài khoản. Trả về list dict kết quả, mỗi dòng có thêm
     'status' (và 'password' = mật khẩu mới, rỗng nếu dòng không đổi mật khẩu).
 
@@ -345,6 +375,11 @@ def run_batch(text, mode='batch', org_slug='', display_name=False, email_domain=
     may_update: người chạy có quyền SỬA tài khoản đã tồn tại không. Đây là chốt
       cuối, không tin form: tắt thì mọi dòng đụng tài khoản đã có đều bị bỏ qua.
     make_staff: đặt cờ 'tình trạng nhân viên' cho tài khoản MỚI TẠO.
+    passwords: {username: mật khẩu} sinh sẵn từ trước. Dùng khi gói phiếu in đã
+      được dựng và trao cho người chạy TRƯỚC, còn việc ghi DB chạy nền sau — mật
+      khẩu trên phiếu và mật khẩu ghi vào DB buộc phải là một.
+      Lưu ý: vẫn phân biệt với row['password'] (mật khẩu do người chạy tự nhập),
+      vì luật cấp quyền giảng viên dựa vào việc cột đó CÓ BỎ TRỐNG hay không.
     """
     from judge.models import Language, Organization, Profile
     if do_create is None and do_update is None and do_reset is None:
@@ -364,9 +399,8 @@ def run_batch(text, mode='batch', org_slug='', display_name=False, email_domain=
     if len(rows) > MAX_ROWS:
         raise ValueError(
             f'Danh sách có {len(rows)} dòng, quá {MAX_ROWS} dòng cho một lần chạy. '
-            'Băm mật khẩu tốn khoảng 0,4 giây mỗi tài khoản nên mẻ dài sẽ bị timeout '
-            'giữa chừng và mất luôn file mật khẩu trả về. Hãy chia nhỏ danh sách.')
-    trung = _trung_trong_me(rows, email_domain)
+            'Hãy chia nhỏ danh sách, hoặc kiểm lại xem có dán nhầm file không.')
+    trung = trung_trong_me(rows, email_domain)
     if trung:
         raise ValueError(
             'Danh sách có dòng trùng nhau, sửa rồi chạy lại (chạy tiếp sẽ đổi tên một '
@@ -396,7 +430,7 @@ def run_batch(text, mode='batch', org_slug='', display_name=False, email_domain=
         username = row['username']
         name, school, room = row['name'], row['school'], row['room']
         email = resolve_email(row['email'], username, email_domain)
-        password = row['password'] or gen_pass()
+        password = row['password'] or (passwords or {}).get(username) or gen_pass()
         skip = dict(row, password='', status='')
         if not USERNAME_RE.match(username):
             results.append({**skip, 'status':
@@ -729,6 +763,86 @@ def _gan_nhan(item, reveal=False):
     if item.get('trung'):
         item['nhan'] += f' · {item["trung"]}'
     return item
+
+
+def du_doan(items, do_create=False, do_update=False, do_reset=False, passwords=None):
+    """Dòng nào SẼ có mật khẩu mới, theo đúng luật của run_batch.
+
+    Dùng để dựng gói phiếu in NGAY, trước khi việc ghi DB kịp chạy. Phải bám sát
+    run_batch, lệch là in ra phiếu mang mật khẩu không bao giờ được ghi vào DB.
+    """
+    passwords = passwords or {}
+    out = []
+    for it in items:
+        tt = it['tinh_trang']
+        pw, tt_txt = '', ''
+        if tt in (TT_TEN_LA, TT_QUAN_TRI, TT_XUNG_DOT) or it.get('trung'):
+            tt_txt = 'sẽ bỏ qua: ' + it['nhan']
+        elif tt == TT_CHUA_CO:
+            if do_create:
+                pw, tt_txt = passwords.get(it['username'], ''), 'sẽ tạo mới'
+            else:
+                tt_txt = 'sẽ bỏ qua: chưa có tài khoản mà không tích tạo mới'
+        else:   # đã có tài khoản
+            if do_reset:
+                # run_batch bỏ qua dòng khớp email mà tên đăng nhập khác, khi
+                # không tích cập nhật — không được in phiếu cho dòng đó.
+                lech = (tt == TT_DA_CO_EMAIL and it.get('hien_co')
+                        and it['hien_co']['username'] != it['username'])
+                if lech and not do_update:
+                    tt_txt = 'sẽ bỏ qua: email thuộc tài khoản mang tên khác'
+                else:
+                    pw, tt_txt = passwords.get(it['username'], ''), 'sẽ đổi mật khẩu'
+            elif do_update:
+                tt_txt = 'sẽ cập nhật (không đổi mật khẩu)'
+            else:
+                tt_txt = 'sẽ bỏ qua: đã có tài khoản'
+        out.append({'username': it['username'], 'password': pw, 'name': it['name'],
+                    'school': it['school'], 'email': it['email'], 'room': it['room'],
+                    'status': tt_txt})
+    return out
+
+
+def build_zip(results, contest_note='', want_slips=False, slip=None, ghi_chu=''):
+    """Gói ZIP trả về cho người chạy: CSV + các PDF nếu có tích in."""
+    import zipfile
+    from hcmus import badges, slips as slips_mod
+
+    slip = slip or {}
+    csv_text = results_csv(results)
+    if ghi_chu:
+        csv_text += ghi_chu
+    pdf_bytes = badge_bytes = tent_bytes = None
+    if want_slips:
+        su_kien = (slip.get('contest') or slip.get('title') or 'FIT-HCMUS Online Judge')
+        try:
+            pdf_bytes = slips_mod.make_slips_pdf(
+                results, title=slip.get('title') or 'FIT-HCMUS Online Judge',
+                contest=slip.get('contest', ''), url=slip.get('url', ''))
+            badge_bytes = badges.make_badges_pdf(results, event=su_kien,
+                                                 copies=slip.get('copies', 3))
+            tent_bytes = badges.make_tents_pdf(results, event=su_kien)
+        except Exception as e:  # noqa: BLE001  thiếu font/thư viện thì vẫn trả CSV
+            csv_text += f'\n# Không tạo được PDF: {e}\n'
+        if pdf_bytes is None:
+            csv_text += ('\n# KHÔNG có phieu-dang-nhap.pdf: không dòng nào có mật khẩu mới.\n'
+                         '# Phiếu chỉ in được tài khoản vừa tạo hoặc vừa đổi mật khẩu.\n'
+                         '# Xem cột trạng thái ở trên để biết vì sao từng dòng bị bỏ qua.\n')
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('tai-khoan.csv', csv_text.encode('utf-8'))
+        if pdf_bytes:
+            z.writestr('phieu-dang-nhap.pdf', pdf_bytes)
+        # Thẻ đeo + bảng tên dùng chung nguồn dữ liệu với phiếu nên gói luôn, ban
+        # tổ chức chỉ phải tải một lần. Hai thứ này chỉ cần tên đội.
+        if badge_bytes:
+            z.writestr('the-deo-ten.pdf', badge_bytes)
+        if tent_bytes:
+            z.writestr('bang-ten-ban.pdf', tent_bytes)
+        if contest_note:
+            z.writestr('cap-quyen-contest.txt', contest_note.encode('utf-8'))
+    return buf.getvalue()
 
 
 def thong_ke(items):
