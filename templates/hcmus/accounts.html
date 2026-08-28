@@ -113,8 +113,10 @@
                     <input type="text" name="email_domain" value="{{ email_domain or '' }}"
                            placeholder="để trống nếu danh sách đã có cột email">
                     <div class="ta-note" style="margin-left:11em">
-                        Dùng khi cả danh sách chung một tên miền. Mã số sinh viên (8 chữ số)
-                        thì tự suy ra <code>@student.hcmus.edu.vn</code>, không cần điền.
+                        Chỉ dùng khi cả danh sách chung một tên miền và phần trước @ đúng
+                        bằng tên đăng nhập. Hệ thống <b>không tự đoán email</b>: bỏ trống ô
+                        này mà danh sách cũng không có cột email thì dòng đó không có email,
+                        và không gửi thư kích hoạt được.
                     </div>
                 </div>
             </div>
@@ -228,8 +230,8 @@
                 <label><input type="checkbox" name="send_activation" id="ta-mail"
                               {% if da_chon and da_chon.get('send_activation') %}checked{% endif %}>
                     <b>Gửi thư để người dùng tự đặt mật khẩu</b>
-                    <span class="ta-note">({{ thong_ke.co_email }} dòng có email; dòng nào
-                        không suy ra được email thì cả mẻ bị chặn)</span></label>
+                    <span class="ta-note">({{ thong_ke.co_email }} dòng có email; còn dòng
+                        nào thiếu email thì cả mẻ bị chặn, sửa danh sách rồi chạy lại)</span></label>
                 <div class="ta-sub-opt" id="ta-mail-opts">
                     {% if not may_edit_accounts %}
                         <p class="ta-note">Thư dùng bản nháp mặc định của hệ thống. Sửa nội
@@ -372,15 +374,29 @@
                 var tiendo = document.getElementById('ta-tiendo');
                 var ketqua = document.getElementById('ta-ketqua');
                 function ve(rows) {
+                    // Tìm chữ khoá ở BẤT KỲ đâu trong trạng thái, không chỉ đầu chuỗi.
+                    // Lỗi gửi thư được nối vào cuối ('tạo mới ... | LỖI GỬI MAIL: ...'),
+                    // nên lọc theo đầu chuỗi sẽ bỏ sót toàn bộ loại lỗi đó và trang
+                    // báo "tất cả đều chạy được" trong khi không thư nào đi.
                     var loi = rows.filter(function (r) {
                         var s = (r.status || '');
-                        return s.indexOf('LỖI') === 0 || s.indexOf('BỎ QUA') === 0 ||
-                               s.indexOf('CHƯA CÓ') === 0 || s.indexOf('ĐÃ CÓ') === 0 ||
-                               s.indexOf('KHÔNG TỒN TẠI') === 0 || s.indexOf('CẢNH BÁO') >= 0;
+                        return ['LỖI', 'BỎ QUA', 'CẢNH BÁO', 'KHÔNG TỒN TẠI',
+                                'CHƯA CÓ', 'ĐÃ CÓ'].some(function (k) {
+                            return s.indexOf(k) >= 0;
+                        });
                     });
+                    var daGui = rows.filter(function (r) {
+                        return (r.status || '').indexOf('+đã gửi mail') >= 0;
+                    }).length;
                     var h = '<p>Xong ' + rows.length + ' dòng';
                     h += loi.length ? ', <b>' + loi.length + ' dòng cần xem lại</b>.</p>'
                                     : ', tất cả đều chạy được.</p>';
+                    h += '<p>Thư kích hoạt đã gửi: <b>' + daGui + '</b>/' + rows.length;
+                    if (!daGui) {
+                        h += ' — không thư nào được gửi. Kiểm lại ô "Gửi thư để người ' +
+                             'dùng tự đặt mật khẩu": ô này mặc định KHÔNG tích.';
+                    }
+                    h += '</p>';
                     if (loi.length) {
                         h += '<div class="ta-wrap"><table class="table striped ta-tbl"><thead><tr>' +
                              '<th>Tên đăng nhập</th><th>Kết quả</th></tr></thead><tbody>';

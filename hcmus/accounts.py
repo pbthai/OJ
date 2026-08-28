@@ -179,12 +179,16 @@ def _school_org(name, cache, create=True):
     return org
 
 
-# --- Mã sinh viên -> email + tổ chức -------------------------------------
-# Mã sinh viên HCMUS là 8 chữ số (kiểm trên dữ liệu thật: 24120438, 24120040...),
-# email trường cấp là <mã>@student.hcmus.edu.vn. Giảng viên KHÔNG có mẫu nào đoán
-# được nên bắt buộc phải nhập email tay — đó là lý do hàm này chỉ nhận toàn số.
+# --- Mã sinh viên -> tổ chức ---------------------------------------------
+# Mã sinh viên HCMUS là 8 chữ số (kiểm trên dữ liệu thật: 24120438, 26120003...).
+# Dùng để tự thêm vào tổ chức HCMUS, KHÔNG dùng để đoán email nữa.
+#
+# Vì sao bỏ đoán email: quy ước email của trường không cố định. Khoá 2026 dùng
+# <mã sinh viên><2 số cuối CCCD>@student.hcmus.edu.vn, tức phần trước @ dài 10 chữ
+# số chứ không phải 8. Đoán theo mẫu cũ thì cả khoá nhận email không tồn tại và
+# không ai kích hoạt được tài khoản. Không nhập email thì để trống, an toàn hơn
+# đoán sai.
 STUDENT_ID_RE = re.compile(r'^\d{8}$')
-STUDENT_EMAIL_DOMAIN = 'student.hcmus.edu.vn'
 STUDENT_ORG_SLUG = 'hcmus'
 
 
@@ -193,13 +197,18 @@ def is_student_id(username):
 
 
 def resolve_email(email, username, email_domain=''):
-    """Email dùng cho tài khoản: ưu tiên cột email, rồi tới mã sinh viên, rồi domain
-    do người chạy nhập. Trả về '' nếu không suy ra được."""
+    """Email dùng cho tài khoản: lấy từ cột email trong danh sách.
+
+    KHÔNG tự đoán từ tên đăng nhập. Chỉ khi người chạy tự tay điền ô "tên miền
+    email" trên form thì mới ghép <tên đăng nhập>@<tên miền> — đó là lựa chọn có
+    ý thức của họ, khác với việc hệ thống tự suy.
+
+    Không có gì để lấy thì trả về '' và dòng đó không có email. Tài khoản vẫn tạo
+    được, chỉ là không gửi thư kích hoạt được.
+    """
     email = (email or '').strip()
     if email:
         return email
-    if is_student_id(username):
-        return f'{username}@{STUDENT_EMAIL_DOMAIN}'
     if email_domain:
         return f'{username}@{email_domain}'
     return ''
