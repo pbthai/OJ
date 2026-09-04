@@ -120,6 +120,15 @@ class UserForm(ModelForm):
         if settings.VNOJ_OFFICIAL_CONTEST_MODE:
             fields.remove('first_name')
 
+        # Khoá tên hiển thị. Sinh viên tự sửa first_name thành biệt danh thì bảng
+        # xếp hạng và báo cáo gửi Khoa không còn khớp danh sách giáo vụ: ngày
+        # 04/09/2026, ngay trong kỳ khảo sát đầu vào, có 25 em đã đổi (vd
+        # 'Con bò biết bay', 'HCMUS_satthudongthap'), phải dò lại toàn bộ và sửa tay.
+        # Dùng cờ riêng thay vì bật VNOJ_OFFICIAL_CONTEST_MODE, vì cờ đó còn gỡ ô
+        # 'about' và đổi thêm nhiều hành vi khác mà ta không muốn.
+        if getattr(settings, 'HCMUS_LOCK_DISPLAY_NAME', False) and 'first_name' in fields:
+            fields.remove('first_name')
+
     def clean_first_name(self):
         first_name = self.cleaned_data['first_name']
         if len(first_name) > 30:
