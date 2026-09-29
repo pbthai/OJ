@@ -585,10 +585,18 @@ class PrintRequestAdmin(admin.ModelAdmin):
     """Hàng đợi + log in bài (CHỈ XEM). In tự động nên đây để giám thị theo dõi và
     soát; muốn in lại thì thí sinh tự bấm 'In bài' lần nữa."""
     list_display = ('created', 'team', 'room', 'problem', 'language', 'pages', 'status',
-                    'printer', 'error')
-    list_filter = ('status', 'contest')
+                    'printed_by', 'printed_at', 'error')
+    list_filter = ('status', 'contest', 'room')
     search_fields = ('team', 'room', 'problem')
     date_hierarchy = 'created'
+
+    def changelist_view(self, request, extra_context=None):
+        from django.urls import reverse
+        self.message_user(request, format_html(
+            '{} <a href="{}">{}</a>',
+            _('Giám thị làm việc ở trang hàng đợi, không phải ở đây:'),
+            reverse('hcmus_print_queue'), _('mở hàng đợi in')), messages.INFO)
+        return super().changelist_view(request, extra_context)
 
     def has_add_permission(self, request):
         return False
@@ -700,9 +708,10 @@ class ContestPrinterInline(admin.StackedInline):
     fk_name = 'contest'
     max_num = 1
     extra = 1
-    fields = ('printer',)
+    fields = ('allow_print', 'printer')
     verbose_name = _('In bài trong giờ thi')
-    verbose_name_plural = _('In bài trong giờ thi (chọn máy in = cho phép; để trống = không cho in)')
+    verbose_name_plural = _('In bài trong giờ thi (tích "cho phép in" = thí sinh gửi được yêu cầu, '
+                            'giám thị tải PDF về tự in)')
 
 
 try:

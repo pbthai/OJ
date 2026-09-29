@@ -168,6 +168,16 @@ def render_submission_pdf(submission, team, room):
                              submission.problem.name)
 
 
+def render_request_pdf(pr):
+    """Dựng lại PDF của một yêu cầu in từ chính dữ liệu đã lưu trong hàng đợi.
+
+    Dựng lại thay vì lưu sẵn tệp PDF: giám thị tải bao nhiêu lần cũng ra đúng một
+    bản, kẹt giấy thì tải lại, và không phải dọn tệp rác trong media.
+    """
+    return render_source_pdf(pr.source, pr.language, pr.pygments, pr.team, pr.room,
+                             pr.problem, when=pr.created)
+
+
 def send_to_printer(pdf_bytes, cups_dest, job_name='in-bai'):
     """Gửi PDF tới máy in qua CUPS `lp -d <cups_dest>`. cups_dest là TÊN HÀNG ĐỢI
     CUPS trên server. Trả về (ok, thông_báo)."""

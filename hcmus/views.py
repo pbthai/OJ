@@ -919,12 +919,70 @@ def accounts_status(request, task_id):
     return JsonResponse(out)
 
 
-@require_POST
-def print_submission(request, submission):
-    from judge.models import Submission
+PENDING_LIMIT_DEFAULT = 3
 
+
+def _co_quyen_giam_thi(user):
+    return user.is_authenticated and user.has_perm('hcmus.view_print_queue')
+
+
+def _xep_hang_in(profile, cp, code, language_name, pygments_name, problem_label,
+                 submission=None):
+    """Dựng PDF, đếm trang, chặn quá trần rồi xếp yêu cầu vào hàng đợi.
+
+    Trả về (ok, thông_điệp). Không gửi máy in: giám thị tải PDF về rồi tự in.
+    """
     from hcmus import printing
     from hcmus.models import ContestPrinter, PrintRequest, TeamRoom
+
+    if not ContestPrinter.cho_phep_in(cp.contest_id):
+        return False, _('Kỳ thi này chưa bật in bài.')
+
+    team = profile.display_name
+    room = TeamRoom.room_of(profile.id)
+    common = dict(profile=profile, submission=submission, contest_id=cp.contest_id,
+                  team=team, room=room, problem=(problem_label or '')[:100],
+                  language=(language_name or '')[:40], pygments=(pygments_name or '')[:40],
+                  source=code)
+
+    try:
+        _pdf, pages = printing.render_source_pdf(code, language_name, pygments_name,
+                                                 team, room, problem_label)
+    except Exception as e:  # noqa: BLE001
+        return False, _('Không dựng được bản in: %s. Báo giám thị.') % e
+
+    limit = getattr(settings, 'HCMUS_PRINT_PAGE_LIMIT', printing.PAGE_LIMIT_DEFAULT)
+    if pages > limit:
+        PrintRequest.objects.create(status=PrintRequest.REJECTED, pages=pages, **common)
+        return False, _('Bài in dài %(p)d trang, vượt trần %(l)d trang nên KHÔNG in. '
+                        'Hãy in gọn lại (bỏ phần thừa).') % {'p': pages, 'l': limit}
+
+    # Chặn dội hàng đợi: mỗi đội chỉ được có vài yêu cầu chưa in cùng lúc, để giám
+    # thị không phải bơi trong hàng đợi của một đội duy nhất.
+    cho = getattr(settings, 'HCMUS_PRINT_PENDING_LIMIT', PENDING_LIMIT_DEFAULT)
+    dang_cho = PrintRequest.objects.filter(profile=profile, contest_id=cp.contest_id,
+                                           status=PrintRequest.QUEUED).count()
+    if dang_cho >= cho:
+        return False, _('Bạn đang có %(n)d yêu cầu in chưa được in. Chờ giám thị mang '
+                        'bản in tới rồi hãy gửi tiếp.') % {'n': dang_cho}
+
+    PrintRequest.objects.create(status=PrintRequest.QUEUED, pages=pages, **common)
+    return True, _('Đã gửi yêu cầu in (%(p)d trang). Giám thị sẽ in và mang tới bàn của bạn.') \
+        % {'p': pages}
+
+
+def _ky_thi_dang_du(profile):
+    """Lượt dự kỳ thi đang diễn ra của thí sinh, hoặc None."""
+    cp = profile.current_contest
+    if cp is None or cp.ended:
+        return None
+    return cp
+
+
+@require_POST
+def print_submission(request, submission):
+    """Thí sinh bấm 'In bài' từ trang bài nộp của mình."""
+    from judge.models import Submission
 
     if not request.user.is_authenticated:
         raise PermissionDenied()
@@ -937,43 +995,136 @@ def print_submission(request, submission):
         return render(request, 'hcmus/print-result.html',
                       {'title': _('In bài'), 'ok': ok, 'message': message, 'submission': sub})
 
-    # Chỉ chủ nhân bài, và phải là bài của contest đang diễn ra mà họ đang dự.
     if sub.user_id != profile.id:
         raise PermissionDenied()
-    cp = profile.current_contest
-    if cp is None or cp.ended or sub.contest_object_id != cp.contest_id:
+    cp = _ky_thi_dang_du(profile)
+    if cp is None or sub.contest_object_id != cp.contest_id:
         return result(False, _('Chỉ in được bài bạn đã nộp trong kỳ thi đang diễn ra.'))
 
-    team = profile.display_name
-    room = TeamRoom.room_of(profile.id)
+    ok, msg = _xep_hang_in(profile, cp, sub.source.source, sub.language.name,
+                           sub.language.pygments, sub.problem.name, submission=sub)
+    return result(ok, msg)
+
+
+class PrintCodeForm(forms.Form):
+    """Dán mã nguồn để in, dùng cho phần mã không nằm trong bài nộp nào."""
+    problem = forms.CharField(label=_('Nhãn bản in'), max_length=100, required=False,
+                              help_text=_('Ví dụ tên bài, hoặc "nháp". Chỉ để giám thị '
+                                          'và bạn nhận ra bản in của mình.'))
+    language = forms.CharField(label=_('Ngôn ngữ'), max_length=40, required=False,
+                               help_text=_('Để tô màu cho dễ đọc. Bỏ trống cũng in được.'))
+    code = forms.CharField(label=_('Mã nguồn'), widget=forms.Textarea(attrs={'rows': 18}))
+
+    def clean_code(self):
+        code = self.cleaned_data['code']
+        if not code.strip():
+            raise forms.ValidationError(_('Chưa có mã nguồn để in.'))
+        return code
+
+
+@login_required
+def print_page(request):
+    """Trang gửi yêu cầu in: dán mã nguồn, server dựng PDF rồi xếp vào hàng đợi."""
+    from judge.models import Language
+
+    profile = request.user.profile
+    cp = _ky_thi_dang_du(profile)
+    ngon_ngu = list(Language.objects.order_by('name').values_list('name', 'pygments'))
+
+    ctx = {'title': _('In bài'), 'cp': cp, 'ngon_ngu': [n for n, _p in ngon_ngu]}
+    if cp is None:
+        ctx['form'] = None
+        ctx['loi'] = _('Bạn không ở trong kỳ thi nào đang diễn ra.')
+        return render(request, 'hcmus/print-form.html', ctx)
+
+    from hcmus.models import ContestPrinter
+    if not ContestPrinter.cho_phep_in(cp.contest_id):
+        ctx['form'] = None
+        ctx['loi'] = _('Kỳ thi này chưa bật in bài.')
+        return render(request, 'hcmus/print-form.html', ctx)
+
+    if request.method == 'POST':
+        form = PrintCodeForm(request.POST)
+        if form.is_valid():
+            ten = form.cleaned_data['language'].strip()
+            pyg = dict(ngon_ngu).get(ten, '')
+            ok, msg = _xep_hang_in(profile, cp, form.cleaned_data['code'], ten, pyg,
+                                   form.cleaned_data['problem'] or _('Mã dán tay'))
+            return render(request, 'hcmus/print-result.html',
+                          {'title': _('In bài'), 'ok': ok, 'message': msg, 'submission': None})
+    else:
+        form = PrintCodeForm()
+    ctx['form'] = form
+    return render(request, 'hcmus/print-form.html', ctx)
+
+
+@user_passes_test(_co_quyen_giam_thi)
+def print_queue(request):
+    """Hàng đợi in cho giám thị: lọc theo phòng, tải PDF, đánh dấu đã in."""
+    from hcmus.models import PrintRequest
+
+    qs = (PrintRequest.objects.select_related('contest', 'profile__user', 'printed_by__user')
+          .order_by('status', 'created'))
+    phong = (request.GET.get('phong') or '').strip()
+    trang_thai = (request.GET.get('tt') or PrintRequest.QUEUED).strip()
+    contest = (request.GET.get('contest') or '').strip()
+
+    if phong:
+        qs = qs.filter(room=phong)
+    if trang_thai and trang_thai != 'tatca':
+        qs = qs.filter(status=trang_thai)
+    if contest:
+        qs = qs.filter(contest__key=contest)
+
+    tat_ca = PrintRequest.objects.all()
+    cac_phong = sorted(p for p in tat_ca.values_list('room', flat=True).distinct() if p)
+    cac_contest = sorted(k for k in tat_ca.exclude(contest=None)
+                         .values_list('contest__key', flat=True).distinct() if k)
+    return render(request, 'hcmus/print-queue.html', {
+        'title': _('Hàng đợi in bài'),
+        'items': qs[:300],
+        'cac_phong': cac_phong,
+        'cac_contest': cac_contest,
+        'phong': phong,
+        'tt': trang_thai,
+        'contest': contest,
+        'so_cho': PrintRequest.objects.filter(status=PrintRequest.QUEUED).count(),
+        'STATUS': PrintRequest.STATUS,
+    })
+
+
+@user_passes_test(_co_quyen_giam_thi)
+def print_download(request, pk):
+    """Tải PDF của một yêu cầu in. Dựng lại mỗi lần nên tải lại bao nhiêu cũng được."""
+    from hcmus import printing
+    from hcmus.models import PrintRequest
+
+    pr = get_object_or_404(PrintRequest, pk=pk)
+    if pr.status == PrintRequest.REJECTED:
+        raise Http404('Yêu cầu này đã bị từ chối vì vượt trần số trang.')
     try:
-        pdf, pages = printing.render_submission_pdf(sub, team, room)
+        pdf, _pages = printing.render_request_pdf(pr)
     except Exception as e:  # noqa: BLE001
-        return result(False, _('Không dựng được bản in: %s. Báo giám thị.') % e)
+        return HttpResponse(_('Không dựng được bản in: %s') % e, status=500,
+                            content_type='text/plain; charset=utf-8')
+    ten = 'in-%s-%s-%d.pdf' % (re.sub(r'[^\w]+', '-', pr.room or 'khong-phong'),
+                               re.sub(r'[^\w]+', '-', pr.team or 'doi'), pr.pk)
+    resp = HttpResponse(pdf, content_type='application/pdf')
+    resp['Content-Disposition'] = 'attachment; filename="%s"' % ten
+    return resp
 
-    limit = getattr(settings, 'HCMUS_PRINT_PAGE_LIMIT', printing.PAGE_LIMIT_DEFAULT)
-    common = dict(profile=profile, submission=sub, contest_id=cp.contest_id, team=team, room=room,
-                  problem=sub.problem.name[:100], language=sub.language.name[:40], pages=pages)
 
-    if pages > limit:
-        PrintRequest.objects.create(status=PrintRequest.REJECTED, **common)
-        return result(False, _('Bài in dài %(p)d trang, vượt trần %(l)d trang nên KHÔNG in. '
-                               'Hãy in gọn lại (bỏ phần thừa).') % {'p': pages, 'l': limit})
+@require_POST
+@user_passes_test(_co_quyen_giam_thi)
+def print_mark(request, pk):
+    """Đánh dấu một yêu cầu đã in xong."""
+    from django.http import HttpResponseRedirect
+    from hcmus.models import PrintRequest
 
-    # Máy in do TỪNG kỳ thi chọn (admin → sửa contest). Không chọn = kỳ đó không in.
-    printer = ContestPrinter.printer_for(cp.contest_id)
-    if printer is None:
-        return result(False, _('Kỳ thi này chưa bật in bài (giám thị chưa chọn máy in).'))
-
-    pr = PrintRequest.objects.create(status=PrintRequest.QUEUED, printer=printer.name, **common)
-    ok, msg = printing.send_to_printer(pdf, printer.cups_dest, job_name=f'{team}-{sub.problem.code}')
-    pr.status = PrintRequest.PRINTED if ok else PrintRequest.FAILED
-    pr.error = '' if ok else msg
-    pr.save(update_fields=['status', 'error'])
-    if ok:
-        return result(True, _('Đã gửi bài đến máy in (%(p)d trang). Giám thị sẽ mang bản in tới bàn của bạn.')
-                      % {'p': pages})
-    return result(False, _('Gửi máy in lỗi: %s. Báo giám thị.') % msg)
+    pr = get_object_or_404(PrintRequest, pk=pk)
+    if pr.status == PrintRequest.QUEUED:
+        pr.danh_dau_da_in(request.user.profile)
+    return HttpResponseRedirect(request.POST.get('next') or reverse('hcmus_print_queue'))
 
 
 # ---------------------------------------------------------------- tìm teammate

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div style="margin-top: 12px;">
+    <p>
+        {{ _('Đang chờ in:') }} <b>{{ so_cho }}</b>.
+        {{ _('Tải PDF về máy, in, rồi bấm "Đã in" để đội sau không bị in trùng.') }}
+    </p>
+
+    <form method="get" style="margin-bottom: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+        <div>
+            <label style="display: block; font-size: .88em; font-weight: 600;">{{ _('Phòng') }}</label>
+            <select name="phong">
+                <option value="">{{ _('tất cả phòng') }}</option>
+                {% for p in cac_phong %}
+                    <option value="{{ p }}" {% if p == phong %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label style="display: block; font-size: .88em; font-weight: 600;">{{ _('Kỳ thi') }}</label>
+            <select name="contest">
+                <option value="">{{ _('tất cả') }}</option>
+                {% for k in cac_contest %}
+                    <option value="{{ k }}" {% if k == contest %}selected{% endif %}>{{ k }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label style="display: block; font-size: .88em; font-weight: 600;">{{ _('Trạng thái') }}</label>
+            <select name="tt">
+                {% for ma, ten in STATUS %}
+                    <option value="{{ ma }}" {% if ma == tt %}selected{% endif %}>{{ ten }}</option>
+                {% endfor %}
+                <option value="tatca" {% if tt == 'tatca' %}selected{% endif %}>{{ _('tất cả') }}</option>
+            </select>
+        </div>
+        <button type="submit" class="button">{{ _('Lọc') }}</button>
+    </form>
+
+    <table class="table" style="width: 100%;">
+        <thead>
+            <tr>
+                <th>{{ _('Lúc') }}</th>
+                <th>{{ _('Phòng') }}</th>
+                <th>{{ _('Đội') }}</th>
+                <th>{{ _('Bản in') }}</th>
+                <th>{{ _('Ngôn ngữ') }}</th>
+                <th style="text-align: right;">{{ _('Trang') }}</th>
+                <th>{{ _('Trạng thái') }}</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for it in items %}
+            <tr>
+                <td style="white-space: nowrap;">{{ it.created|date("H:i:s") }}</td>
+                <td><b>{{ it.room or '—' }}</b></td>
+                <td>{{ it.team or it.profile }}</td>
+                <td>{{ it.problem or '—' }}</td>
+                <td>{{ it.language or '—' }}</td>
+                <td style="text-align: right;">{{ it.pages }}</td>
+                <td>{{ it.get_status_display() }}{% if it.printed_by %}
+                    <div style="font-size: .82em; opacity: .7;">{{ it.printed_by }}</div>{% endif %}</td>
+                <td style="white-space: nowrap;">
+                    {% if it.status != 'R' %}
+                        <a class="button" href="{{ url('hcmus_print_download', it.id) }}">{{ _('Tải PDF') }}</a>
+                    {% endif %}
+                    {% if it.status == 'Q' %}
+                        <form method="post" action="{{ url('hcmus_print_mark', it.id) }}"
+                              style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                            <button type="submit" class="button">{{ _('Đã in') }}</button>
+                        </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="8">{{ _('Không có yêu cầu nào khớp bộ lọc.') }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

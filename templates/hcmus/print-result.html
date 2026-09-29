@@ -6,12 +6,16 @@
                 background: {% if ok %}#eefaf0{% else %}#fdecea{% endif %};
                 padding: 14px 18px; border-radius: 6px;">
         <div style="font-weight: 700; font-size: 1.05em; margin-bottom: 4px;">
-            {% if ok %}✅ {{ _('Đã nhận yêu cầu in') }}{% else %}⛔ {{ _('Không in được') }}{% endif %}
+            {% if ok %}{{ _('Đã nhận yêu cầu in') }}{% else %}{{ _('Không in được') }}{% endif %}
         </div>
         <div>{{ message }}</div>
     </div>
     <p style="margin-top: 14px;">
-        <a href="{{ url('submission_source', submission.id) }}">← {{ _('Quay lại bài nộp') }}</a>
+        {% if submission %}
+            <a href="{{ url('submission_source', submission.id) }}">← {{ _('Quay lại bài nộp') }}</a>
+        {% else %}
+            <a href="{{ url('hcmus_print_page') }}">← {{ _('Gửi bản in khác') }}</a>
+        {% endif %}
     </p>
 </div>
 {% endblock %}

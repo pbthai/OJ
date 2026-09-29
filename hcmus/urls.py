@@ -32,7 +32,11 @@ urlpatterns = [
     path('tim-teammate/', views.teammate_board, name='hcmus_teammate'),
     path('tim-teammate/trang-thai/', views.teammate_status, name='hcmus_teammate_status'),
     path('tim-teammate/xoa/<int:pk>/', views.teammate_delete, name='hcmus_teammate_delete'),
+    path('in-bai/', views.print_page, name='hcmus_print_page'),
     path('in-bai/<int:submission>/', views.print_submission, name='hcmus_print_submission'),
+    path('hang-doi-in/', views.print_queue, name='hcmus_print_queue'),
+    path('hang-doi-in/<int:pk>/tai-ve.pdf', views.print_download, name='hcmus_print_download'),
+    path('hang-doi-in/<int:pk>/da-in/', views.print_mark, name='hcmus_print_mark'),
     # ĐẶT CUỐI CÙNG: bắt mọi đường dẫn một cấp còn lại (vd /pretest/). Phải nằm sau
     # tất cả URL khác, nếu không nó nuốt mất các trang bên trên.
     path('<slug:slug>/', views.landing_page, name='hcmus_landing'),

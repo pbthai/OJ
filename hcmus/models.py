@@ -457,6 +457,14 @@ class PrintRequest(models.Model):
     status = models.CharField(max_length=1, choices=STATUS, default=QUEUED, verbose_name=_('status'))
     printer = models.CharField(max_length=60, blank=True, verbose_name=_('printer'))
     error = models.CharField(max_length=300, blank=True, verbose_name=_('error'))
+    # Giữ nguyên văn mã nguồn để dựng lại PDF mỗi lần giám thị tải: bản in
+    # phải in lại được sau khi kẹt giấy, và bài in dán tay không gắn với
+    # submission nào nên không có chỗ khác để lấy mã.
+    source = models.TextField(blank=True, verbose_name=_('source code'))
+    pygments = models.CharField(max_length=40, blank=True, verbose_name=_('pygments lexer'))
+    printed_by = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name=_('marked printed by'))
+    printed_at = models.DateTimeField(null=True, blank=True, verbose_name=_('marked printed at'))
     created = models.DateTimeField(auto_now_add=True, verbose_name=_('created'))
 
     class Meta:
@@ -468,17 +476,35 @@ class PrintRequest(models.Model):
     def __str__(self):
         return f'{self.team or self.profile} — {self.problem} ({self.get_status_display()})'
 
+    def danh_dau_da_in(self, profile):
+        """Giám thị đánh dấu đã in xong. Ghi lại ai và lúc nào để sau còn truy được
+        ai đã mang bản in tới bàn nào."""
+        from django.utils import timezone
+        self.status = self.PRINTED
+        self.printed_by = profile
+        self.printed_at = timezone.now()
+        self.save(update_fields=['status', 'printed_by', 'printed_at'])
+
 
 class ContestPrinter(models.Model):
-    """Máy in cho một kỳ thi. CÓ chọn máy in = cho phép in bài trong kỳ đó (in tới
-    máy này); để trống (hoặc không có bản ghi) = KHÔNG cho phép in. Cấu hình ngay
-    trong trang sửa contest (inline), nên bật/tắt in là chuyện của từng kỳ thi."""
+    """Bật/tắt in bài cho một kỳ thi, cấu hình ngay trong trang sửa contest (inline).
+
+    Cách in hiện tại là QUA HÀNG ĐỢI: thí sinh gửi yêu cầu, server dựng PDF và xếp
+    vào hàng, giám thị tải về rồi tự in ở máy của mình. Vì vậy cái bật/tắt là cờ
+    `allow_print`, không còn là việc có chọn máy in hay không.
+
+    Trường `printer` giữ lại cho đường in thẳng qua CUPS: khi nào mạng tới được máy
+    in phòng thi thì dùng lại được ngay, không phải đổi lược đồ.
+    """
     contest = models.OneToOneField(Contest, on_delete=models.CASCADE,
                                    related_name='hcmus_printer', verbose_name=_('contest'))
+    allow_print = models.BooleanField(default=False, verbose_name=_('allow printing'),
+                                      help_text=_('Bật để thí sinh được gửi yêu cầu in trong kỳ thi '
+                                                  'này. Yêu cầu vào hàng đợi, giám thị tải về và tự in.'))
     printer = models.ForeignKey(Printer, on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name='+', verbose_name=_('printer'),
-                                help_text=_('Chọn máy in để CHO PHÉP thí sinh in bài trong kỳ thi '
-                                            'này. Để trống = không cho phép in.'))
+                                help_text=_('Chỉ dùng cho đường in thẳng qua CUPS. Cách in qua hàng '
+                                            'đợi không cần máy in, để trống được.'))
 
     class Meta:
         verbose_name = _('contest printing')
@@ -489,9 +515,15 @@ class ContestPrinter(models.Model):
 
     @classmethod
     def printer_for(cls, contest_id):
-        """Máy in đã chọn cho contest (Printer) hoặc None nếu kỳ đó không bật in."""
+        """Máy in đã chọn cho contest (Printer) hoặc None. Chỉ dùng cho đường in
+        thẳng qua CUPS; cách in qua hàng đợi không cần máy in."""
         cfg = cls.objects.filter(contest_id=contest_id).select_related('printer').first()
         return cfg.printer if cfg else None
+
+    @classmethod
+    def cho_phep_in(cls, contest_id):
+        """Kỳ thi này có cho thí sinh gửi yêu cầu in không."""
+        return cls.objects.filter(contest_id=contest_id, allow_print=True).exists()
 
 
 class PermSet(models.Model):
