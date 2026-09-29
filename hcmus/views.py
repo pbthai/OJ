@@ -792,7 +792,12 @@ def accounts_page(request):
         ctx['thong_ke'] = acc.thong_ke(ctx['items'])
         return render(request, 'hcmus/accounts.html', ctx)
 
-    passwords = {r['username']: (r['password'] or acc.gen_pass()) for r in rows}
+    # Sinh theo MẺ, kiểm kho rò rỉ song song: gọi từng cái một thì 800 tài khoản
+    # mất hơn ba phút và request chết ở ngưỡng cắt của nginx.
+    _can = [r for r in rows if not r['password']]
+    _moi = iter(acc.gen_passwords(len(_can)))
+    _sinh = {r['username']: next(_moi) for r in _can}
+    passwords = {r['username']: (r['password'] or _sinh[r['username']]) for r in rows}
     items = acc.preview_rows(text, email_domain, reveal=may_edit)
     du_doan = acc.du_doan(items, do_create, do_update, do_reset, passwords)
 

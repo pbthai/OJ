@@ -20,6 +20,7 @@ import re
 import io
 import secrets
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q
@@ -103,8 +104,71 @@ def kiem_truoc(text, email_domain='', send_activation=False, do_create=False):
     return rows
 
 
-def gen_pass():
+def _sinh_tho():
     return ''.join(secrets.choice(PASS_ALPHABET) for _ in range(PASS_LEN))
+
+
+def _bi_ro_ri(mat_khau):
+    """Mật khẩu này có nằm trong kho mật khẩu bị rò rỉ không.
+
+    Dùng dịch vụ Have I Been Pwned qua tiện ích sẵn có của vnoj. An toàn về riêng
+    tư: chỉ 5 ký tự đầu của mã băm SHA-1 rời khỏi máy chủ, không phải mật khẩu.
+
+    Mạng hỏng thì trả False, tức chấp nhận mật khẩu. Thà phát một mật khẩu chưa
+    kiểm được còn hơn dừng cả mẻ cấp tài khoản ngay trước giờ thi.
+    """
+    try:
+        from judge.utils.pwned import pwned_password
+        return bool(pwned_password(mat_khau))
+    except Exception:       # noqa: BLE001 — mạng hỏng, API đổi, gì cũng vậy
+        return False
+
+
+def gen_pass():
+    """Sinh mật khẩu và né kho mật khẩu bị rò rỉ.
+
+    Vì sao phải né: site bật kiểm tra rò rỉ lúc đăng nhập (judge/views/user.py),
+    trúng thì middleware chặn mọi trang và bắt đổi mật khẩu ngay. Giữa giờ thi thì
+    đó là thảm hoạ. Đã đo: khuôn 9 chữ số 2-9 trúng cỡ một phần trăm, thấp nhưng
+    với 800 đội vẫn ra vài đội bị chặn ngay đầu giờ.
+
+    Giữ nguyên khuôn chữ số 2-9 theo quy ước đã chốt (tránh nhầm i/l/1 và o/0 khi
+    thí sinh gõ lại từ phiếu in), chỉ sinh lại khi trúng.
+    """
+    if not getattr(settings, 'HCMUS_PASSWORD_AVOID_PWNED', True):
+        return _sinh_tho()
+    for _ in range(10):
+        mk = _sinh_tho()
+        if not _bi_ro_ri(mk):
+            return mk
+    return mk       # 10 lần đều trúng thì thôi, cực hiếm, đừng treo vòng lặp
+
+
+def gen_passwords(n):
+    """Sinh n mật khẩu đã né kho rò rỉ, kiểm SONG SONG.
+
+    Vì sao cần bản theo mẻ: một lần hỏi kho rò rỉ mất khoảng 0,25 giây. Gọi
+    gen_pass() 800 lần trong một request web là hơn ba phút, quá ngưỡng cắt 60
+    giây của nginx, và trang cấp tài khoản dựng gói mật khẩu ngay trong request.
+    Kiểm song song thì 800 cái còn khoảng mười lăm giây.
+    """
+    if n <= 0:
+        return []
+    if not getattr(settings, 'HCMUS_PASSWORD_AVOID_PWNED', True):
+        return [_sinh_tho() for _ in range(n)]
+
+    from concurrent.futures import ThreadPoolExecutor
+    xong = []
+    for _ in range(5):                      # tỷ lệ trúng cỡ 1%, một vòng là gần đủ
+        thieu = n - len(xong)
+        if thieu <= 0:
+            break
+        me = [_sinh_tho() for _ in range(thieu)]
+        with ThreadPoolExecutor(max_workers=16) as ex:
+            dinh = list(ex.map(_bi_ro_ri, me))
+        xong += [mk for mk, d in zip(me, dinh) if not d]
+    xong += [_sinh_tho() for _ in range(n - len(xong))]
+    return xong[:n]
 
 
 def _norm_header(cell):
