@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block js_media %}
+    {# Tự làm mới để trực thi không phải bấm F5. Dừng làm mới khi đang gõ, nếu không
+       thì đang soạn tin sẽ bị mất chữ. #}
+    <script>
+    (function () {
+        var dangGo = false;
+        document.addEventListener('DOMContentLoaded', function () {
+            var o = document.getElementById('war-body');
+            if (o) {
+                o.addEventListener('focus', function () { dangGo = true; });
+                o.addEventListener('blur', function () { dangGo = o.value.trim() !== ''; });
+            }
+            setInterval(function () { if (!dangGo) location.reload(); }, 15000);
+        });
+    })();
+    </script>
+{% endblock %}
+
+{% block body %}
+<div style="max-width: 900px; margin-top: 12px;">
+    <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+                background: {% if con_viec %}#fff6e5{% else %}#eefaf0{% endif %};
+                border-left: 6px solid {% if con_viec %}#e0900a{% else %}#2e9e4f{% endif %};
+                padding: 10px 16px; border-radius: 6px; margin-bottom: 12px;">
+        <div style="font-size: 1.8em; font-weight: 700; line-height: 1;">{{ con_viec }}</div>
+        <div style="font-size: .92em;">
+            {% if con_viec %}{{ _('việc bot báo chưa tích hoàn thành') }}
+            {% else %}{{ _('không còn việc nào chờ xử lý') }}{% endif %}
+            <div style="opacity: .75;">{{ _('Trang tự làm mới mỗi 15 giây, trừ khi bạn đang gõ.') }}</div>
+        </div>
+    </div>
+
+    <form method="post" style="margin-bottom: 14px;">
+        {% csrf_token %}
+        <textarea name="body" id="war-body" rows="2" style="width: 100%;"
+                  placeholder="{{ _('Nhắn cho trực thi...') }}"></textarea>
+        <button type="submit" class="button" style="margin-top: 6px;">{{ _('Gửi') }}</button>
+    </form>
+
+    <form method="get" style="margin-bottom: 12px; display: flex; gap: 10px; align-items: flex-end;">
+        <div>
+            <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Kỳ thi') }}</label>
+            <select name="contest">
+                <option value="">{{ _('tất cả') }}</option>
+                {% for k in cac_contest %}
+                    <option value="{{ k }}" {% if k == contest %}selected{% endif %}>{{ k }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <label style="font-size: .9em;">
+            <input type="checkbox" name="viec" value="1" {% if chi_viec %}checked{% endif %}>
+            {{ _('chỉ việc chưa xong') }}
+        </label>
+        <button type="submit" class="button">{{ _('Lọc') }}</button>
+    </form>
+
+    {% for m in items %}
+    <div style="border: 1px solid #e2e2e2; border-left: 4px solid
+                {% if m.kind == 'B' %}{% if m.done %}#2e9e4f{% else %}#e0900a{% endif %}{% else %}#c8c8c8{% endif %};
+                border-radius: 6px; padding: 9px 13px; margin-bottom: 8px;
+                background: {% if m.done %}#f6fbf7{% else %}#fff{% endif %};">
+        <div style="display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;">
+            <b>{% if m.kind == 'B' %}🤖 bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}</b>
+            <span style="font-size: .84em; opacity: .7;">{{ m.created|date("H:i:s d/m") }}</span>
+            {% if m.contest %}<span style="font-size: .8em; opacity: .65;">{{ m.contest.key }}</span>{% endif %}
+            {% if m.event %}<span style="font-size: .78em; background: #eef2f7; padding: 1px 7px;
+                                          border-radius: 9px;">{{ m.event }}</span>{% endif %}
+            {% if m.done %}<span style="font-size: .8em; color: #2e9e4f;">
+                ✓ {{ _('xong') }}{% if m.done_by %} — {{ m.done_by }}{% endif %}</span>{% endif %}
+            <span style="margin-left: auto; font-size: .85em; opacity: .8;">{{ m.score }}</span>
+        </div>
+
+        <div style="margin: 5px 0 6px;">
+            {% if m.retracted %}
+                <i style="opacity: .6;">{{ _('Tin đã được thu hồi.') }}</i>
+            {% else %}
+                {{ m.body }}
+                {% if m.url %} <a href="{{ m.url }}">{{ _('mở') }}</a>{% endif %}
+            {% endif %}
+        </div>
+
+        {% if not m.retracted %}
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            {% for ma, nhan in (('len', '▲'), ('xuong', '▼'), ('xong', m.done and _('bỏ tích') or _('tích xong')), ('thu-hoi', _('thu hồi'))) %}
+                {% if ma != 'thu-hoi' or m.author_id == request.profile.id or request.user.is_superuser %}
+                <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                    <button type="submit" class="button" style="padding: 1px 9px; font-size: .85em;
+                        {% if ma == 'len' and m.phieu_cua_toi == 1 %}font-weight:700;{% endif %}
+                        {% if ma == 'xuong' and m.phieu_cua_toi == -1 %}font-weight:700;{% endif %}">{{ nhan }}</button>
+                </form>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+        <p style="opacity: .75;">{{ _('Chưa có tin nào.') }}</p>
+    {% endfor %}
+</div>
+{% endblock %}

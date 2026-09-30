@@ -526,6 +526,73 @@ class ContestPrinter(models.Model):
         return cls.objects.filter(contest_id=contest_id, allow_print=True).exists()
 
 
+class WarMessage(models.Model):
+    """Một dòng trong phòng dã chiến — chỗ giám thị và admin trực thi nói chuyện.
+
+    Vừa là chat của người, vừa là bảng tin của bot. Bot đăng khi có việc cần biết
+    ngay trong giờ thi: ai đó gửi yêu cầu in, ai đó mở ticket. Gộp chung một dòng
+    thời gian để trực thi chỉ phải nhìn MỘT chỗ, thay vì đảo qua lại giữa trang
+    ticket, trang hàng đợi in và một nhóm chat ở đâu đó.
+
+    Ba thao tác trên mỗi tin, đều ghi lại người làm:
+      - thu hồi: gõ nhầm thì rút lại, nhưng KHÔNG xoá khỏi bảng, vì trong giờ thi
+        mọi phát ngôn đều có thể phải truy lại sau. Thu hồi chỉ ẩn nội dung.
+      - tích hoàn thành: dùng cho việc, ví dụ "đã mang bản in tới bàn A3".
+      - bầu lên/xuống: để việc gấp nổi lên đầu khi cần.
+    """
+    CHAT = 'C'
+    BOT = 'B'
+    KIND = ((CHAT, _('Người')), (BOT, _('Bot')))
+
+    contest = models.ForeignKey(Contest, on_delete=models.CASCADE, null=True, blank=True,
+                                related_name='war_messages', verbose_name=_('contest'),
+                                help_text=_('Để trống là phòng chung, không gắn kỳ thi nào.'))
+    author = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='war_messages', verbose_name=_('author'))
+    kind = models.CharField(max_length=1, choices=KIND, default=CHAT, verbose_name=_('kind'))
+    event = models.CharField(max_length=24, blank=True, verbose_name=_('event'),
+                             help_text=_('Loại sự kiện nếu là tin của bot: print, ticket...'))
+    body = models.TextField(verbose_name=_('content'))
+    url = models.CharField(max_length=300, blank=True, verbose_name=_('link'))
+    created = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_('created'))
+
+    retracted = models.BooleanField(default=False, verbose_name=_('retracted'))
+    retracted_by = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+', verbose_name=_('retracted by'))
+    done = models.BooleanField(default=False, db_index=True, verbose_name=_('done'))
+    done_by = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+', verbose_name=_('done by'))
+    done_at = models.DateTimeField(null=True, blank=True, verbose_name=_('done at'))
+    score = models.IntegerField(default=0, db_index=True, verbose_name=_('score'))
+
+    class Meta:
+        verbose_name = _('war room message')
+        verbose_name_plural = _('war room messages')
+        ordering = ['-created']
+        permissions = (('use_war_room', _('Use the war room (on-duty staff)')),)
+
+    def __str__(self):
+        return '%s: %s' % (self.author or 'bot', self.body[:40])
+
+    def tinh_lai_diem(self):
+        from django.db.models import Sum
+        self.score = self.votes.aggregate(t=Sum('value'))['t'] or 0
+        self.save(update_fields=['score'])
+        return self.score
+
+
+class WarVote(models.Model):
+    """Một phiếu của một người cho một tin. Đổi ý thì ghi đè, bấm lại thì bỏ phiếu."""
+    message = models.ForeignKey(WarMessage, on_delete=models.CASCADE, related_name='votes')
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='+')
+    value = models.SmallIntegerField(choices=((1, '+1'), (-1, '-1')))
+
+    class Meta:
+        unique_together = ('message', 'profile')
+        verbose_name = _('war room vote')
+        verbose_name_plural = _('war room votes')
+
+
 class PermSet(models.Model):
     """Tập quyền, lồng nhau được — đại số tập hợp cho phân quyền.
 
@@ -1043,3 +1110,43 @@ class LandingPage(models.Model):
         """File tải lên có phải một trang HTML trọn vẹn không."""
         head = self.html[:2000].lower()
         return '<html' in head or '<!doctype html' in head
+
+
+# ---------------------------------------------------------------- bot phòng dã chiến
+
+def bot_noi(contest, event, body, url=''):
+    """Bot đăng một dòng vào phòng dã chiến.
+
+    Nuốt mọi lỗi: đây là tính năng phụ trợ, không được phép làm hỏng việc chính.
+    Một cái bảng tin không ghi được thì thà mất dòng tin còn hơn làm hỏng lượt nộp
+    yêu cầu in hoặc lượt mở ticket của thí sinh.
+    """
+    try:
+        WarMessage.objects.create(contest=contest, author=None, kind=WarMessage.BOT,
+                                  event=event, body=body[:2000], url=url[:300])
+    except Exception:       # noqa: BLE001
+        pass
+
+
+@receiver(post_save, sender='hcmus.PrintRequest')
+def _bot_bao_yeu_cau_in(sender, instance, created, **kwargs):
+    if not created or instance.status != PrintRequest.QUEUED:
+        return
+    from django.urls import reverse
+    bot_noi(instance.contest, 'print',
+            'Yêu cầu in: %s — phòng %s — %s (%d trang)' % (
+                instance.team or instance.profile, instance.room or '?',
+                instance.problem or '?', instance.pages),
+            reverse('hcmus_print_queue'))
+
+
+@receiver(post_save, sender='judge.Ticket')
+def _bot_bao_ticket(sender, instance, created, **kwargs):
+    if not created:
+        return
+    from django.urls import reverse
+    try:
+        link = reverse('ticket', args=[instance.id])
+    except Exception:       # noqa: BLE001
+        link = ''
+    bot_noi(None, 'ticket', 'Ticket mới: %s — %s' % (instance.title, instance.user), link)

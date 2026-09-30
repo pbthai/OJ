@@ -250,6 +250,8 @@
                     {# "in" chỉ hiện khi đang trong một kỳ thi: ngoài giờ thi thì mục
                        này vô dụng, để hiện quanh năm cho 1300 sinh viên là rác menu #}
                     {% elif node.key.startswith('in') and not (request.user.is_authenticated and request.profile and request.profile.current_contest) %}
+                    {# "pdc" = phòng dã chiến, chỉ người trực thi #}
+                    {% elif node.key.startswith('pdc') and not (request.user.is_authenticated and request.user.has_perm('hcmus.use_war_room')) %}
                     {% else %}
                     <li>
                         <a href="{{ node.path }}" class="nav-{{ node.key }}{% if node.key in nav_tab %} active{% endif %}">

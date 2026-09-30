@@ -18,6 +18,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from hcmus.models import (CalendarEvent, ContestPrinter, HomeSection, JudgeSwitch, PermSet,
+                          WarMessage,
                           Printer, PrintRequest, Ranking, RankingContest, SidebarSection,
                           LandingPage, PublicScoreboard, TeammatePost, TeamRoom,
                           UserScore)
@@ -844,3 +845,21 @@ class LandingPageAdmin(admin.ModelAdmin):
         if not obj.pk:
             return '—'
         return format_html('<a href="{}" target="_blank">/{}/</a>', obj.get_absolute_url(), obj.slug)
+
+
+@admin.register(WarMessage)
+class WarMessageAdmin(admin.ModelAdmin):
+    """Phòng dã chiến — xem lại sau kỳ thi. Trực thi làm việc ở trang /phong-da-chien/,
+    không phải ở đây. Không cho sửa: nội dung trong giờ thi phải giữ nguyên để còn
+    truy lại được; gõ nhầm thì dùng nút thu hồi, nó ẩn nội dung mà vẫn giữ dấu vết."""
+    list_display = ('created', 'kind', 'event', 'author', 'contest', 'body',
+                    'done', 'done_by', 'retracted', 'score')
+    list_filter = ('kind', 'event', 'done', 'retracted', 'contest')
+    search_fields = ('body',)
+    date_hierarchy = 'created'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

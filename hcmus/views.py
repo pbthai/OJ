@@ -1095,6 +1095,94 @@ def print_page(request):
     return render(request, 'hcmus/print-form.html', ctx)
 
 
+def _co_quyen_truc_thi(user):
+    return user.is_authenticated and user.has_perm('hcmus.use_war_room')
+
+
+@user_passes_test(_co_quyen_truc_thi)
+def war_room(request):
+    """Phòng dã chiến: chat của trực thi cộng bảng tin của bot, chung một dòng thời gian.
+
+    Tin mới nhất lên ĐẦU chứ không phải cuối như chat thường. Lý do: trang tự làm
+    mới trong giờ thi, mà nếu mới nhất nằm cuối thì mỗi lần làm mới lại phải cuộn
+    xuống, trực thi đang cầm xấp giấy không làm được việc đó.
+    """
+    from hcmus.models import WarMessage, WarVote
+    from judge.models import Contest
+
+    profile = request.user.profile
+    key = (request.GET.get('contest') or '').strip()
+    chi_viec = request.GET.get('viec') == '1'
+
+    if request.method == 'POST':
+        noi_dung = (request.POST.get('body') or '').strip()
+        if noi_dung:
+            ct = Contest.objects.filter(key=key).first() if key else None
+            WarMessage.objects.create(contest=ct, author=profile,
+                                      kind=WarMessage.CHAT, body=noi_dung[:2000])
+        return HttpResponseRedirect(request.get_full_path())
+
+    qs = WarMessage.objects.select_related('author__user', 'done_by__user', 'contest')
+    if key:
+        qs = qs.filter(contest__key=key)
+    if chi_viec:
+        qs = qs.filter(done=False, kind=WarMessage.BOT)
+    items = list(qs[:200])
+
+    da_bau = dict(WarVote.objects.filter(profile=profile, message__in=items)
+                  .values_list('message_id', 'value'))
+    for m in items:
+        m.phieu_cua_toi = da_bau.get(m.id, 0)
+
+    cac_contest = list(Contest.objects.filter(war_messages__isnull=False)
+                       .values_list('key', flat=True).distinct())
+    return render(request, 'hcmus/war-room.html', {
+        'title': _('Phòng dã chiến'),
+        'items': items,
+        'cac_contest': cac_contest,
+        'contest': key,
+        'chi_viec': chi_viec,
+        'con_viec': WarMessage.objects.filter(done=False, kind=WarMessage.BOT).count(),
+    })
+
+
+@require_POST
+@user_passes_test(_co_quyen_truc_thi)
+def war_action(request, pk, hanh_dong):
+    """Thu hồi, tích hoàn thành, hoặc bầu một tin."""
+    from django.utils import timezone
+    from hcmus.models import WarMessage, WarVote
+
+    m = get_object_or_404(WarMessage, pk=pk)
+    profile = request.user.profile
+    quay_ve = HttpResponseRedirect(request.POST.get('next') or reverse('hcmus_war_room'))
+
+    if hanh_dong == 'thu-hoi':
+        # Chỉ tác giả rút lời của mình; superuser gỡ được tin của bất kỳ ai.
+        if m.author_id != profile.id and not request.user.is_superuser:
+            raise PermissionDenied()
+        m.retracted = True
+        m.retracted_by = profile
+        m.save(update_fields=['retracted', 'retracted_by'])
+    elif hanh_dong == 'xong':
+        m.done = not m.done
+        m.done_by = profile if m.done else None
+        m.done_at = timezone.now() if m.done else None
+        m.save(update_fields=['done', 'done_by', 'done_at'])
+    elif hanh_dong in ('len', 'xuong'):
+        gia_tri = 1 if hanh_dong == 'len' else -1
+        cu = WarVote.objects.filter(message=m, profile=profile).first()
+        if cu and cu.value == gia_tri:
+            cu.delete()                 # bấm lại chính nút đang chọn = bỏ phiếu
+        else:
+            WarVote.objects.update_or_create(message=m, profile=profile,
+                                             defaults={'value': gia_tri})
+        m.tinh_lai_diem()
+    else:
+        raise Http404()
+    return quay_ve
+
+
 @user_passes_test(_co_quyen_giam_thi)
 def print_queue(request):
     """Hàng đợi in cho giám thị: lọc theo phòng, tải PDF, đánh dấu đã in."""
