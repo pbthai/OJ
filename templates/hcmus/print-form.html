@@ -1,19 +1,87 @@
 {% extends "base.html" %}
 
 {% block body %}
-<div style="max-width: 820px; margin-top: 12px;">
-    {% if loi %}
-        <div style="border-left: 5px solid #c0392b; background: #fdecea; padding: 14px 18px;
-                    border-radius: 6px;">{{ loi }}</div>
-    {% else %}
-        <p>{{ _('Dán mã nguồn cần in. Server dựng bản PDF có tên đội và phòng thi ở đầu mỗi trang, rồi xếp vào hàng đợi. Giám thị in và mang tới bàn của bạn.') }}</p>
-        <form method="post">
+<div style="max-width: 980px; margin-top: 12px;">
+{% if loi %}
+    <div style="border-left: 5px solid #c0392b; background: #fdecea; padding: 14px 18px;
+                border-radius: 6px;">{{ loi }}</div>
+{% else %}
+    <p style="margin-bottom: 14px;">
+        {{ _('Chọn bài nộp muốn in, xem lại mã nguồn, rồi bấm yêu cầu in. Giám thị sẽ in và mang bản in tới bàn của bạn.') }}
+        {% if dang_cho %}
+            <b>{{ _('Bạn đang có %(n)d yêu cầu chờ in.', n=dang_cho) }}</b>
+        {% endif %}
+    </p>
+
+    <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start;">
+        <div style="flex: 1 1 320px; min-width: 300px;">
+            <h3 style="margin: 0 0 8px;">{{ _('Bài nộp của bạn') }}</h3>
+            {% if bai_nop %}
+            <table class="table" style="width: 100%;">
+                <tbody>
+                {% for s in bai_nop %}
+                    <tr {% if sub and s.id == sub.id %}style="background: #eef4fb;"{% endif %}>
+                        <td style="white-space: nowrap;">{{ s.date|date("H:i") }}</td>
+                        <td>{{ s.problem.name }}</td>
+                        <td style="white-space: nowrap;">{{ s.language.short_display_name }}</td>
+                        <td style="white-space: nowrap;">{{ s.result or '—' }}</td>
+                        <td style="text-align: right; white-space: nowrap;">
+                            {% if s.id in da_gui %}
+                                <span style="font-size: .85em; opacity: .7;">{{ _('đã gửi in') }}</span>
+                            {% endif %}
+                            <a class="button" href="?sub={{ s.id }}">{{ _('Chọn') }}</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p style="opacity: .75;">{{ _('Bạn chưa nộp bài nào trong kỳ thi này.') }}</p>
+            {% endif %}
+        </div>
+
+        <div style="flex: 1 1 420px; min-width: 320px;">
+            <h3 style="margin: 0 0 8px;">{{ _('Xem lại trước khi in') }}</h3>
+            {% if loi_chon %}
+                <div style="border-left: 5px solid #c0392b; background: #fdecea;
+                            padding: 10px 14px; border-radius: 6px;">{{ loi_chon }}</div>
+            {% elif sub %}
+                <div style="margin-bottom: 8px;">
+                    <b>{{ sub.problem.name }}</b> · {{ sub.language.name }} ·
+                    {{ sub.date|date("H:i:s d/m") }}
+                </div>
+                <pre style="max-height: 420px; overflow: auto; background: #f7f7f7;
+                            border: 1px solid #ddd; border-radius: 6px; padding: 10px;
+                            font-size: .86em; line-height: 1.35;">{{ ma_nguon }}</pre>
+                <form method="post" action="{{ url('hcmus_print_submission', sub.id) }}"
+                      style="margin-top: 10px;">
+                    {% csrf_token %}
+                    <button type="submit" class="button"
+                            style="font-size: 1.05em; padding: 8px 18px;">
+                        {{ _('Yêu cầu in bài này') }}
+                    </button>
+                    {% if sub.id in da_gui %}
+                        <span style="margin-left: 10px; opacity: .75;">
+                            {{ _('Bài này bạn đã gửi in trước đó.') }}
+                        </span>
+                    {% endif %}
+                </form>
+            {% else %}
+                <p style="opacity: .75;">{{ _('Bấm "Chọn" ở một bài nộp bên trái để xem mã nguồn.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if form %}
+    <details style="margin-top: 22px;">
+        <summary style="cursor: pointer; font-weight: 600;">
+            {{ _('Hoặc dán mã nguồn để in (dùng khi mã chưa nộp thành bài)') }}
+        </summary>
+        <form method="post" style="margin-top: 12px; max-width: 760px;">
             {% csrf_token %}
             {% for field in form %}
                 <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 3px;">
-                        {{ field.label }}
-                    </label>
+                    <label style="display: block; font-weight: 600; margin-bottom: 3px;">{{ field.label }}</label>
                     {{ field }}
                     {% if field.help_text %}
                         <div style="font-size: .88em; opacity: .75;">{{ field.help_text }}</div>
@@ -26,13 +94,12 @@
             <button type="submit" class="button">{{ _('Gửi yêu cầu in') }}</button>
         </form>
         {% if ngon_ngu %}
-            <details style="margin-top: 14px;">
-                <summary>{{ _('Tên ngôn ngữ dùng được') }}</summary>
-                <div style="font-size: .9em; opacity: .85; margin-top: 6px;">
-                    {{ ngon_ngu|join(', ') }}
-                </div>
-            </details>
+            <div style="font-size: .88em; opacity: .8; margin-top: 8px;">
+                {{ _('Tên ngôn ngữ dùng được:') }} {{ ngon_ngu|join(', ') }}
+            </div>
         {% endif %}
+    </details>
     {% endif %}
+{% endif %}
 </div>
 {% endblock %}

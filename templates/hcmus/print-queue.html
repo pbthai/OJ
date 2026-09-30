@@ -1,11 +1,30 @@
 {% extends "base.html" %}
 
+{% block js_media %}
+    {# Tự làm mới để giám thị không phải bấm F5 suốt buổi thi. Chỉ làm mới khi
+       đang xem việc CHƯA in, để đang thao tác thì không bị giật trang. #}
+    {% if tt == 'Q' %}
+        <script>setTimeout(function () { location.reload(); }, 20000);</script>
+    {% endif %}
+{% endblock %}
+
 {% block body %}
 <div style="margin-top: 12px;">
-    <p>
-        {{ _('Đang chờ in:') }} <b>{{ so_cho }}</b>.
-        {{ _('Tải PDF về máy, in, rồi bấm "Đã in" để đội sau không bị in trùng.') }}
-    </p>
+    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+                background: {% if so_cho %}#fff6e5{% else %}#eefaf0{% endif %};
+                border-left: 6px solid {% if so_cho %}#e0900a{% else %}#2e9e4f{% endif %};
+                padding: 12px 18px; border-radius: 6px; margin-bottom: 14px;">
+        <div style="font-size: 2.1em; font-weight: 700; line-height: 1;">{{ so_cho }}</div>
+        <div>
+            <div style="font-weight: 600;">
+                {% if so_cho %}{{ _('yêu cầu đang chờ in') }}{% else %}{{ _('không còn việc nào chờ in') }}{% endif %}
+            </div>
+            <div style="font-size: .9em; opacity: .8;">
+                {{ _('Tải PDF về máy, in, rồi bấm "Đã in" để đội sau không bị in trùng.') }}
+                {% if tt == 'Q' %}{{ _('Trang tự làm mới mỗi 20 giây.') }}{% endif %}
+            </div>
+        </div>
+    </div>
 
     <form method="get" style="margin-bottom: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
         <div>

@@ -1029,37 +1029,69 @@ class PrintCodeForm(forms.Form):
 
 @login_required
 def print_page(request):
-    """Trang gửi yêu cầu in: dán mã nguồn, server dựng PDF rồi xếp vào hàng đợi."""
-    from judge.models import Language
+    """Trang in bài của thí sinh.
+
+    Ba việc trên một trang, theo đúng thứ tự thí sinh nghĩ: chọn bài nộp muốn in,
+    xem lại mã nguồn cho chắc, rồi bấm yêu cầu in. Phần dán mã tay để cuối, cho
+    trường hợp muốn in thứ chưa nộp.
+    """
+    from judge.models import Language, Submission
+    from hcmus.models import ContestPrinter, PrintRequest
 
     profile = request.user.profile
     cp = _ky_thi_dang_du(profile)
-    ngon_ngu = list(Language.objects.order_by('name').values_list('name', 'pygments'))
+    ctx = {'title': _('In bài'), 'cp': cp}
 
-    ctx = {'title': _('In bài'), 'cp': cp, 'ngon_ngu': [n for n, _p in ngon_ngu]}
     if cp is None:
-        ctx['form'] = None
-        ctx['loi'] = _('Bạn không ở trong kỳ thi nào đang diễn ra.')
+        ctx['loi'] = _('Bạn không ở trong kỳ thi nào đang diễn ra. Vào kỳ thi và bấm '
+                       'Tham gia trước đã.')
         return render(request, 'hcmus/print-form.html', ctx)
-
-    from hcmus.models import ContestPrinter
     if not ContestPrinter.cho_phep_in(cp.contest_id):
-        ctx['form'] = None
         ctx['loi'] = _('Kỳ thi này chưa bật in bài.')
         return render(request, 'hcmus/print-form.html', ctx)
+
+    ngon_ngu = list(Language.objects.order_by('name').values_list('name', 'pygments'))
+    ctx['ngon_ngu'] = [n for n, _p in ngon_ngu]
 
     if request.method == 'POST':
         form = PrintCodeForm(request.POST)
         if form.is_valid():
             ten = form.cleaned_data['language'].strip()
-            pyg = dict(ngon_ngu).get(ten, '')
-            ok, msg = _xep_hang_in(profile, cp, form.cleaned_data['code'], ten, pyg,
+            ok, msg = _xep_hang_in(profile, cp, form.cleaned_data['code'], ten,
+                                   dict(ngon_ngu).get(ten, ''),
                                    form.cleaned_data['problem'] or _('Mã dán tay'))
             return render(request, 'hcmus/print-result.html',
                           {'title': _('In bài'), 'ok': ok, 'message': msg, 'submission': None})
     else:
         form = PrintCodeForm()
     ctx['form'] = form
+
+    # Bài nộp của chính mình trong kỳ thi này, mới nhất lên đầu.
+    bai_nop = (Submission.objects
+               .filter(user=profile, contest_object_id=cp.contest_id)
+               .select_related('problem', 'language')
+               .order_by('-id')[:60])
+    ctx['bai_nop'] = bai_nop
+
+    # Đã gửi in rồi thì đánh dấu, để thí sinh khỏi bấm hai lần cho cùng một bài.
+    ctx['da_gui'] = set(PrintRequest.objects
+                        .filter(profile=profile, contest_id=cp.contest_id)
+                        .exclude(submission=None)
+                        .values_list('submission_id', flat=True))
+    ctx['dang_cho'] = PrintRequest.objects.filter(
+        profile=profile, contest_id=cp.contest_id, status=PrintRequest.QUEUED).count()
+
+    # Chọn một bài để xem lại mã nguồn trước khi in.
+    chon = request.GET.get('sub')
+    if chon and chon.isdigit():
+        sub = Submission.objects.filter(id=int(chon), user=profile,
+                                        contest_object_id=cp.contest_id).select_related(
+                                            'problem', 'language', 'source').first()
+        if sub is None:
+            ctx['loi_chon'] = _('Không tìm thấy bài nộp đó trong kỳ thi này.')
+        else:
+            ctx['sub'] = sub
+            ctx['ma_nguon'] = sub.source.source
     return render(request, 'hcmus/print-form.html', ctx)
 
 
