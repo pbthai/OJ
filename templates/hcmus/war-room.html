@@ -57,7 +57,8 @@
     </form>
 
     {% for m in items %}
-    <div style="border: 1px solid #e2e2e2; border-left: 4px solid
+    <div style="border: 1px solid {% if m.noi_bat %}#e0b050{% else %}#e2e2e2{% endif %};
+                {% if m.noi_bat %}box-shadow: 0 0 0 2px #fdf1d6;{% endif %} border-left: 4px solid
                 {% if m.kind == 'B' %}{% if m.done %}#2e9e4f{% else %}#e0900a{% endif %}{% else %}#c8c8c8{% endif %};
                 border-radius: 6px; padding: 9px 13px; margin-bottom: 8px;
                 background: {% if m.done %}#f6fbf7{% else %}#fff{% endif %};">
@@ -69,7 +70,7 @@
                                           border-radius: 9px;">{{ m.event }}</span>{% endif %}
             {% if m.done %}<span style="font-size: .8em; color: #2e9e4f;">
                 ✓ {{ _('xong') }}{% if m.done_by %} — {{ m.done_by }}{% endif %}</span>{% endif %}
-            <span style="margin-left: auto; font-size: .85em; opacity: .8;">{{ m.score }}</span>
+            {% if m.noi_bat %}<span style="font-size: .8em; color: #b36b00;">★ {{ _('nổi bật') }}</span>{% endif %}
         </div>
 
         <div style="margin: 5px 0 6px;">
@@ -82,20 +83,49 @@
         </div>
 
         {% if not m.retracted %}
-        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-            {% for ma, nhan in (('len', '▲'), ('xuong', '▼'), ('xong', m.done and _('bỏ tích') or _('tích xong')), ('thu-hoi', _('thu hồi'))) %}
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            {% for ma, nhan in (('noi-bat', m.noi_bat and _('bỏ nổi bật') or _('nổi bật')), ('xong', m.done and _('bỏ tích') or _('tích xong')), ('thu-hoi', _('thu hồi'))) %}
                 {% if ma != 'thu-hoi' or m.author_id == request.profile.id or request.user.is_superuser %}
                 <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}" style="display: inline;">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path() }}">
-                    <button type="submit" class="button" style="padding: 1px 9px; font-size: .85em;
-                        {% if ma == 'len' and m.phieu_cua_toi == 1 %}font-weight:700;{% endif %}
-                        {% if ma == 'xuong' and m.phieu_cua_toi == -1 %}font-weight:700;{% endif %}">{{ nhan }}</button>
+                    <button type="submit" class="button" style="padding: 1px 9px; font-size: .85em;">{{ nhan }}</button>
                 </form>
                 {% endif %}
             {% endfor %}
+            <a href="#" class="button" style="padding: 1px 9px; font-size: .85em;"
+               onclick="var f=document.getElementById('tl{{ m.id }}'); f.hidden=!f.hidden; if(!f.hidden) f.querySelector('textarea').focus(); return false;">
+                {{ _('trả lời') }}</a>
         </div>
         {% endif %}
+
+        {% for r in m.replies.all() %}
+            <div style="margin: 7px 0 0 22px; padding: 6px 10px; border-left: 3px solid #dcdcdc;
+                        background: #fafafa; border-radius: 4px;">
+                <div style="font-size: .84em; opacity: .75;">
+                    <b>{{ r.author or _('(đã xoá)') }}</b> · {{ r.created|date("H:i:s") }}
+                </div>
+                <div>{% if r.retracted %}<i style="opacity:.6;">{{ _('Tin đã được thu hồi.') }}</i>
+                     {% else %}{{ r.body }}{% endif %}</div>
+                {% if not r.retracted and (r.author_id == request.profile.id or request.user.is_superuser) %}
+                <form method="post" action="{{ url('hcmus_war_action', r.id, 'thu-hoi') }}" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                    <button type="submit" class="button"
+                            style="padding: 0 7px; font-size: .8em;">{{ _('thu hồi') }}</button>
+                </form>
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        <form method="post" id="tl{{ m.id }}" hidden style="margin: 8px 0 0 22px;">
+            {% csrf_token %}
+            <input type="hidden" name="parent" value="{{ m.id }}">
+            <textarea name="body" rows="2" style="width: 100%;"
+                      placeholder="{{ _('Trả lời...') }}"></textarea>
+            <button type="submit" class="button" style="margin-top: 4px; padding: 1px 10px;
+                    font-size: .85em;">{{ _('Gửi trả lời') }}</button>
+        </form>
     </div>
     {% else %}
         <p style="opacity: .75;">{{ _('Chưa có tin nào.') }}</p>

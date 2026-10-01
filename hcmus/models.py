@@ -538,12 +538,15 @@ class WarMessage(models.Model):
       - thu hồi: gõ nhầm thì rút lại, nhưng KHÔNG xoá khỏi bảng, vì trong giờ thi
         mọi phát ngôn đều có thể phải truy lại sau. Thu hồi chỉ ẩn nội dung.
       - tích hoàn thành: dùng cho việc, ví dụ "đã mang bản in tới bàn A3".
-      - bầu lên/xuống: để việc gấp nổi lên đầu khi cần.
+      - nổi bật: ghim một tin lên đầu, dùng cho thông báo cả ca phải thấy.
+      - trả lời: gắn tin vào một tin trước đó, để tranh luận không trộn vào dòng chính.
     """
     CHAT = 'C'
     BOT = 'B'
     KIND = ((CHAT, _('Người')), (BOT, _('Bot')))
 
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
+                               related_name='replies', verbose_name=_('reply to'))
     contest = models.ForeignKey(Contest, on_delete=models.CASCADE, null=True, blank=True,
                                 related_name='war_messages', verbose_name=_('contest'),
                                 help_text=_('Để trống là phòng chung, không gắn kỳ thi nào.'))
@@ -563,34 +566,16 @@ class WarMessage(models.Model):
     done_by = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name='+', verbose_name=_('done by'))
     done_at = models.DateTimeField(null=True, blank=True, verbose_name=_('done at'))
-    score = models.IntegerField(default=0, db_index=True, verbose_name=_('score'))
+    noi_bat = models.BooleanField(default=False, db_index=True, verbose_name=_('highlighted'))
 
     class Meta:
         verbose_name = _('war room message')
         verbose_name_plural = _('war room messages')
-        ordering = ['-created']
+        ordering = ['-noi_bat', '-created']
         permissions = (('use_war_room', _('Use the war room (on-duty staff)')),)
 
     def __str__(self):
         return '%s: %s' % (self.author or 'bot', self.body[:40])
-
-    def tinh_lai_diem(self):
-        from django.db.models import Sum
-        self.score = self.votes.aggregate(t=Sum('value'))['t'] or 0
-        self.save(update_fields=['score'])
-        return self.score
-
-
-class WarVote(models.Model):
-    """Một phiếu của một người cho một tin. Đổi ý thì ghi đè, bấm lại thì bỏ phiếu."""
-    message = models.ForeignKey(WarMessage, on_delete=models.CASCADE, related_name='votes')
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='+')
-    value = models.SmallIntegerField(choices=((1, '+1'), (-1, '-1')))
-
-    class Meta:
-        unique_together = ('message', 'profile')
-        verbose_name = _('war room vote')
-        verbose_name_plural = _('war room votes')
 
 
 class PermSet(models.Model):

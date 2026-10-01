@@ -1107,7 +1107,7 @@ def war_room(request):
     mới trong giờ thi, mà nếu mới nhất nằm cuối thì mỗi lần làm mới lại phải cuộn
     xuống, trực thi đang cầm xấp giấy không làm được việc đó.
     """
-    from hcmus.models import WarMessage, WarVote
+    from hcmus.models import WarMessage
     from judge.models import Contest
 
     profile = request.user.profile
@@ -1118,21 +1118,27 @@ def war_room(request):
         noi_dung = (request.POST.get('body') or '').strip()
         if noi_dung:
             ct = Contest.objects.filter(key=key).first() if key else None
-            WarMessage.objects.create(contest=ct, author=profile,
+            cha = None
+            tra_loi = request.POST.get('parent')
+            if tra_loi and tra_loi.isdigit():
+                cha = WarMessage.objects.filter(pk=int(tra_loi)).first()
+                if cha is not None:
+                    # Trả lời của trả lời thì vẫn gắn vào tin gốc: một tầng là đủ
+                    # cho trực thi, lồng sâu hơn thì đọc rối trong lúc gấp.
+                    cha = cha.parent or cha
+                    ct = cha.contest
+            WarMessage.objects.create(contest=ct, author=profile, parent=cha,
                                       kind=WarMessage.CHAT, body=noi_dung[:2000])
         return HttpResponseRedirect(request.get_full_path())
 
-    qs = WarMessage.objects.select_related('author__user', 'done_by__user', 'contest')
+    qs = (WarMessage.objects.filter(parent=None)
+          .select_related('author__user', 'done_by__user', 'contest')
+          .prefetch_related('replies__author__user'))
     if key:
         qs = qs.filter(contest__key=key)
     if chi_viec:
         qs = qs.filter(done=False, kind=WarMessage.BOT)
     items = list(qs[:200])
-
-    da_bau = dict(WarVote.objects.filter(profile=profile, message__in=items)
-                  .values_list('message_id', 'value'))
-    for m in items:
-        m.phieu_cua_toi = da_bau.get(m.id, 0)
 
     cac_contest = list(Contest.objects.filter(war_messages__isnull=False)
                        .values_list('key', flat=True).distinct())
@@ -1151,7 +1157,7 @@ def war_room(request):
 def war_action(request, pk, hanh_dong):
     """Thu hồi, tích hoàn thành, hoặc bầu một tin."""
     from django.utils import timezone
-    from hcmus.models import WarMessage, WarVote
+    from hcmus.models import WarMessage
 
     m = get_object_or_404(WarMessage, pk=pk)
     profile = request.user.profile
@@ -1169,15 +1175,9 @@ def war_action(request, pk, hanh_dong):
         m.done_by = profile if m.done else None
         m.done_at = timezone.now() if m.done else None
         m.save(update_fields=['done', 'done_by', 'done_at'])
-    elif hanh_dong in ('len', 'xuong'):
-        gia_tri = 1 if hanh_dong == 'len' else -1
-        cu = WarVote.objects.filter(message=m, profile=profile).first()
-        if cu and cu.value == gia_tri:
-            cu.delete()                 # bấm lại chính nút đang chọn = bỏ phiếu
-        else:
-            WarVote.objects.update_or_create(message=m, profile=profile,
-                                             defaults={'value': gia_tri})
-        m.tinh_lai_diem()
+    elif hanh_dong == 'noi-bat':
+        m.noi_bat = not m.noi_bat
+        m.save(update_fields=['noi_bat'])
     else:
         raise Http404()
     return quay_ve

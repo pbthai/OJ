@@ -853,8 +853,8 @@ class WarMessageAdmin(admin.ModelAdmin):
     không phải ở đây. Không cho sửa: nội dung trong giờ thi phải giữ nguyên để còn
     truy lại được; gõ nhầm thì dùng nút thu hồi, nó ẩn nội dung mà vẫn giữ dấu vết."""
     list_display = ('created', 'kind', 'event', 'author', 'contest', 'body',
-                    'done', 'done_by', 'retracted', 'score')
-    list_filter = ('kind', 'event', 'done', 'retracted', 'contest')
+                    'done', 'done_by', 'retracted', 'noi_bat')
+    list_filter = ('kind', 'event', 'done', 'retracted', 'noi_bat', 'contest')
     search_fields = ('body',)
     date_hierarchy = 'created'
 
