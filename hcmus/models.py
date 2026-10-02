@@ -505,6 +505,11 @@ class ContestPrinter(models.Model):
                                 related_name='+', verbose_name=_('printer'),
                                 help_text=_('Chỉ dùng cho đường in thẳng qua CUPS. Cách in qua hàng '
                                             'đợi không cần máy in, để trống được.'))
+    page_quota = models.PositiveIntegerField(
+        default=20, verbose_name=_('page quota per team'),
+        help_text=_('Tổng số trang mỗi đội được in trong CẢ kỳ thi. Đặt 0 nếu không '
+                    'muốn giới hạn. Yêu cầu bị từ chối vì quá dài không tính vào đây.'))
+
 
     class Meta:
         verbose_name = _('contest printing')
@@ -519,6 +524,12 @@ class ContestPrinter(models.Model):
         thẳng qua CUPS; cách in qua hàng đợi không cần máy in."""
         cfg = cls.objects.filter(contest_id=contest_id).select_related('printer').first()
         return cfg.printer if cfg else None
+
+    @classmethod
+    def han_muc(cls, contest_id):
+        """Số trang mỗi đội được in trong kỳ thi này. 0 nghĩa là không giới hạn."""
+        cfg = cls.objects.filter(contest_id=contest_id).first()
+        return cfg.page_quota if cfg else 0
 
     @classmethod
     def cho_phep_in(cls, contest_id):

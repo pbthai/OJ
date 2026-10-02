@@ -709,7 +709,7 @@ class ContestPrinterInline(admin.StackedInline):
     fk_name = 'contest'
     max_num = 1
     extra = 1
-    fields = ('allow_print', 'printer')
+    fields = ('allow_print', 'page_quota', 'printer')
     verbose_name = _('In bài trong giờ thi')
     verbose_name_plural = _('In bài trong giờ thi (tích "cho phép in" = thí sinh gửi được yêu cầu, '
                             'giám thị tải PDF về tự in)')

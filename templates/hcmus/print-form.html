@@ -7,14 +7,27 @@
                 border-radius: 6px;">{{ loi }}</div>
 {% else %}
     <p style="margin-bottom: 14px;">
-        {{ _('Chọn bài nộp muốn in, xem lại mã nguồn, rồi bấm yêu cầu in. Giám thị sẽ in và mang bản in tới bàn của bạn.') }}
+        {% if nhan_vien_ngoai_ky_thi %}
+            {{ _('Bạn đang in với tư cách nhân viên, ngoài kỳ thi. Dán nội dung cần in vào ô bên dưới. Bản in vào cùng hàng đợi với bản in của thí sinh.') }}
+        {% else %}
+            {{ _('Chọn bài nộp muốn in, xem lại mã nguồn, rồi bấm yêu cầu in. Giám thị sẽ in và mang bản in tới bàn của bạn.') }}
+        {% endif %}
         {% if dang_cho %}
             <b>{{ _('Bạn đang có %(n)d yêu cầu chờ in.', n=dang_cho) }}</b>
         {% endif %}
     </p>
 
+    {% if han_muc %}
+        <p style="margin-bottom: 14px; padding: 10px 14px; border-radius: 6px;
+                  border-left: 5px solid {% if con_lai %}#2d7a3e{% else %}#c0392b{% endif %};
+                  background: {% if con_lai %}#eef7f0{% else %}#fdecea{% endif %};">
+            {{ _('Hạn mức in của đội trong kỳ thi này: %(h)d trang. Đã dùng %(d)d, còn %(c)d.',
+                 h=han_muc, d=da_dung, c=con_lai) }}
+        </p>
+    {% endif %}
+
     <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start;">
-        <div style="flex: 1 1 320px; min-width: 300px;">
+        <div style="flex: 1 1 320px; min-width: 300px;{% if nhan_vien_ngoai_ky_thi %}display: none;{% endif %}">
             <h3 style="margin: 0 0 8px;">{{ _('Bài nộp của bạn') }}</h3>
             {% if bai_nop %}
             <table class="table" style="width: 100%;">

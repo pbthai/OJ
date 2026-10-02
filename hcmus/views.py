@@ -19,7 +19,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.http import (FileResponse, Http404, HttpResponse,
                          HttpResponseBadRequest, HttpResponseRedirect, JsonResponse)
 from django.middleware.csrf import get_token
@@ -940,12 +940,15 @@ def _xep_hang_in(profile, cp, code, language_name, pygments_name, problem_label,
     from hcmus import printing
     from hcmus.models import ContestPrinter, PrintRequest, TeamRoom
 
-    if not ContestPrinter.cho_phep_in(cp.contest_id):
+    # cp=None nghĩa là nhân viên in ngoài kỳ thi (in tài liệu, thử hệ thống). Khi đó
+    # không có kỳ thi để hỏi cờ cho phép, và cũng không áp hạn mức của đội nào.
+    contest_id = cp.contest_id if cp is not None else None
+    if contest_id is not None and not ContestPrinter.cho_phep_in(contest_id):
         return False, _('Kỳ thi này chưa bật in bài.')
 
     team = profile.display_name
     room = TeamRoom.room_of(profile.id)
-    common = dict(profile=profile, submission=submission, contest_id=cp.contest_id,
+    common = dict(profile=profile, submission=submission, contest_id=contest_id,
                   team=team, room=room, problem=(problem_label or '')[:100],
                   language=(language_name or '')[:40], pygments=(pygments_name or '')[:40],
                   source=code)
@@ -962,16 +965,34 @@ def _xep_hang_in(profile, cp, code, language_name, pygments_name, problem_label,
         return False, _('Bài in dài %(p)d trang, vượt trần %(l)d trang nên KHÔNG in. '
                         'Hãy in gọn lại (bỏ phần thừa).') % {'p': pages, 'l': limit}
 
+    # Hạn mức trang của cả kỳ thi, tính theo đội. Đếm cả yêu cầu đang chờ lẫn đã in,
+    # nhưng KHÔNG đếm yêu cầu bị từ chối vì nó chưa tiêu tờ giấy nào.
+    han = ContestPrinter.han_muc(contest_id) if contest_id is not None else 0
+    if han:
+        da_dung = (PrintRequest.objects
+                   .filter(profile=profile, contest_id=contest_id)
+                   .exclude(status=PrintRequest.REJECTED)
+                   .aggregate(t=Sum('pages'))['t'] or 0)
+        if da_dung + pages > han:
+            return False, _('Đội bạn đã in %(d)d trang trong tổng hạn mức %(h)d trang của '
+                            'kỳ thi. Bản này %(p)d trang nên vượt mức, hệ thống không nhận. '
+                            'Còn lại %(c)d trang.') % {'d': da_dung, 'h': han, 'p': pages,
+                                                       'c': max(han - da_dung, 0)}
+
     # Chặn dội hàng đợi: mỗi đội chỉ được có vài yêu cầu chưa in cùng lúc, để giám
     # thị không phải bơi trong hàng đợi của một đội duy nhất.
     cho = getattr(settings, 'HCMUS_PRINT_PENDING_LIMIT', PENDING_LIMIT_DEFAULT)
-    dang_cho = PrintRequest.objects.filter(profile=profile, contest_id=cp.contest_id,
+    dang_cho = PrintRequest.objects.filter(profile=profile, contest_id=contest_id,
                                            status=PrintRequest.QUEUED).count()
     if dang_cho >= cho:
         return False, _('Bạn đang có %(n)d yêu cầu in chưa được in. Chờ giám thị mang '
                         'bản in tới rồi hãy gửi tiếp.') % {'n': dang_cho}
 
     PrintRequest.objects.create(status=PrintRequest.QUEUED, pages=pages, **common)
+    if han:
+        con = max(han - (da_dung + pages), 0)
+        return True, _('Đã gửi yêu cầu in (%(p)d trang). Giám thị sẽ in và mang tới bàn của '
+                       'bạn. Đội bạn còn %(c)d trang trong hạn mức.') % {'p': pages, 'c': con}
     return True, _('Đã gửi yêu cầu in (%(p)d trang). Giám thị sẽ in và mang tới bàn của bạn.') \
         % {'p': pages}
 
@@ -1004,7 +1025,11 @@ def print_submission(request, submission):
         raise PermissionDenied()
     cp = _ky_thi_dang_du(profile)
     if cp is None or sub.contest_object_id != cp.contest_id:
-        return result(False, _('Chỉ in được bài bạn đã nộp trong kỳ thi đang diễn ra.'))
+        # Nhân viên in được bài nộp của chính mình bất cứ lúc nào (thử hệ thống, in lại
+        # tài liệu). Thí sinh thì chỉ in trong kỳ thi đang dự.
+        if not request.user.is_staff:
+            return result(False, _('Chỉ in được bài bạn đã nộp trong kỳ thi đang diễn ra.'))
+        cp = None
 
     ok, msg = _xep_hang_in(profile, cp, sub.source.source, sub.language.name,
                            sub.language.pygments, sub.problem.name, submission=sub)
@@ -1042,13 +1067,23 @@ def print_page(request):
     cp = _ky_thi_dang_du(profile)
     ctx = {'title': _('In bài'), 'cp': cp}
 
-    if cp is None:
+    # Nhân viên in được cả khi không ở trong kỳ thi nào: họ cần in tài liệu điều hành
+    # và cần thử đường in trước giờ thi. Lúc đó chỉ có ô dán mã, không có danh sách bài
+    # nộp và không áp hạn mức của đội nào.
+    nhan_vien = request.user.is_staff
+    ctx['nhan_vien_ngoai_ky_thi'] = cp is None and nhan_vien
+    if cp is None and not nhan_vien:
         ctx['loi'] = _('Bạn không ở trong kỳ thi nào đang diễn ra. Vào kỳ thi và bấm '
                        'Tham gia trước đã.')
         return render(request, 'hcmus/print-form.html', ctx)
-    if not ContestPrinter.cho_phep_in(cp.contest_id):
-        ctx['loi'] = _('Kỳ thi này chưa bật in bài.')
-        return render(request, 'hcmus/print-form.html', ctx)
+    if cp is not None and not ContestPrinter.cho_phep_in(cp.contest_id):
+        if not nhan_vien:
+            ctx['loi'] = _('Kỳ thi này chưa bật in bài.')
+            return render(request, 'hcmus/print-form.html', ctx)
+        # Nhân viên vẫn in được, nhưng in với tư cách ngoài kỳ thi.
+        cp = None
+        ctx['cp'] = None
+        ctx['nhan_vien_ngoai_ky_thi'] = True
 
     ngon_ngu = list(Language.objects.order_by('name').values_list('name', 'pygments'))
     ctx['ngon_ngu'] = [n for n, _p in ngon_ngu]
@@ -1065,6 +1100,22 @@ def print_page(request):
     else:
         form = PrintCodeForm()
     ctx['form'] = form
+
+    if cp is None:
+        ctx['bai_nop'] = []
+        ctx['da_gui'] = set()
+        return render(request, 'hcmus/print-form.html', ctx)
+
+    # Hạn mức trang của đội, để thí sinh thấy trước khi bấm chứ không phải bấm rồi mới biết.
+    han = ContestPrinter.han_muc(cp.contest_id)
+    if han:
+        da_dung = (PrintRequest.objects
+                   .filter(profile=profile, contest_id=cp.contest_id)
+                   .exclude(status=PrintRequest.REJECTED)
+                   .aggregate(t=Sum('pages'))['t'] or 0)
+        ctx['han_muc'] = han
+        ctx['da_dung'] = da_dung
+        ctx['con_lai'] = max(han - da_dung, 0)
 
     # Bài nộp của chính mình trong kỳ thi này, mới nhất lên đầu.
     bai_nop = (Submission.objects
