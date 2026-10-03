@@ -19,6 +19,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import (FileResponse, Http404, HttpResponse,
                          HttpResponseBadRequest, HttpResponseRedirect, JsonResponse)
@@ -967,28 +968,45 @@ def _xep_hang_in(profile, cp, code, language_name, pygments_name, problem_label,
 
     # Hạn mức trang của cả kỳ thi, tính theo đội. Đếm cả yêu cầu đang chờ lẫn đã in,
     # nhưng KHÔNG đếm yêu cầu bị từ chối vì nó chưa tiêu tờ giấy nào.
-    han = ContestPrinter.han_muc(contest_id) if contest_id is not None else 0
-    if han:
-        da_dung = (PrintRequest.objects
-                   .filter(profile=profile, contest_id=contest_id)
-                   .exclude(status=PrintRequest.REJECTED)
-                   .aggregate(t=Sum('pages'))['t'] or 0)
-        if da_dung + pages > han:
-            return False, _('Đội bạn đã in %(d)d trang trong tổng hạn mức %(h)d trang của '
-                            'kỳ thi. Bản này %(p)d trang nên vượt mức, hệ thống không nhận. '
-                            'Còn lại %(c)d trang.') % {'d': da_dung, 'h': han, 'p': pages,
-                                                       'c': max(han - da_dung, 0)}
-
-    # Chặn dội hàng đợi: mỗi đội chỉ được có vài yêu cầu chưa in cùng lúc, để giám
-    # thị không phải bơi trong hàng đợi của một đội duy nhất.
+    # Đếm rồi ghi phải nằm trong một transaction, và phải khoá một dòng để hai yêu cầu
+    # gửi cùng lúc không cùng đọc được số cũ rồi cùng lọt qua hạn mức. Khoá đặt trên dòng
+    # ContestPrinter của kỳ thi: mỗi kỳ thi một dòng nên rẻ, và nó cũng chính là dòng
+    # giữ hạn mức. Ngoài kỳ thi (nhân viên) thì không có hạn mức nên không cần khoá.
     cho = getattr(settings, 'HCMUS_PRINT_PENDING_LIMIT', PENDING_LIMIT_DEFAULT)
-    dang_cho = PrintRequest.objects.filter(profile=profile, contest_id=contest_id,
-                                           status=PrintRequest.QUEUED).count()
-    if dang_cho >= cho:
-        return False, _('Bạn đang có %(n)d yêu cầu in chưa được in. Chờ giám thị mang '
-                        'bản in tới rồi hãy gửi tiếp.') % {'n': dang_cho}
+    da_dung = 0
+    with transaction.atomic():
+        han = 0
+        if contest_id is not None:
+            khoa = (ContestPrinter.objects.select_for_update()
+                    .filter(contest_id=contest_id).first())
+            han = khoa.page_quota if khoa else 0
+        if han:
+            da_dung = (PrintRequest.objects
+                       .filter(profile=profile, contest_id=contest_id)
+                       .exclude(status=PrintRequest.REJECTED)
+                       .aggregate(t=Sum('pages'))['t'] or 0)
+            if da_dung + pages > han:
+                return False, _('Đội bạn đã in %(d)d trang trong tổng hạn mức %(h)d trang '
+                                'của kỳ thi. Bản này %(p)d trang nên vượt mức, hệ thống '
+                                'không nhận. Còn lại %(c)d trang.') % {
+                                    'd': da_dung, 'h': han, 'p': pages,
+                                    'c': max(han - da_dung, 0)}
 
-    PrintRequest.objects.create(status=PrintRequest.QUEUED, pages=pages, **common)
+        # Chặn dội hàng đợi: mỗi đội chỉ được có vài yêu cầu chưa in cùng lúc, để giám
+        # thị không phải bơi trong hàng đợi của một đội duy nhất.
+        dang_cho = PrintRequest.objects.filter(profile=profile, contest_id=contest_id,
+                                               status=PrintRequest.QUEUED).count()
+        if dang_cho >= cho:
+            return False, _('Bạn đang có %(n)d yêu cầu in chưa được in. Chờ giám thị mang '
+                            'bản in tới rồi hãy gửi tiếp.') % {'n': dang_cho}
+
+        # Nhãn tự sinh phải tính lại ở đây chứ không tin giá trị nhúng trong form: bấm
+        # Back rồi gửi lại sẽ mang theo nhãn cũ và hai bản in trùng số.
+        if re.fullmatch(r'%s-print\d+' % re.escape(profile.display_name),
+                        common.get('problem') or ''):
+            common['problem'] = _nhan_ban_in(profile, contest_id)[:100]
+
+        PrintRequest.objects.create(status=PrintRequest.QUEUED, pages=pages, **common)
     if han:
         con = max(han - (da_dung + pages), 0)
         return True, _('Đã gửi yêu cầu in (%(p)d trang). Giám thị sẽ in và mang tới bàn của '
@@ -1043,7 +1061,7 @@ def print_submission(request, submission):
     if cp is None or sub.contest_object_id != cp.contest_id:
         # Nhân viên in được bài nộp của chính mình bất cứ lúc nào (thử hệ thống, in lại
         # tài liệu). Thí sinh thì chỉ in trong kỳ thi đang dự.
-        if not request.user.is_staff:
+        if not (request.user.is_staff or _co_quyen_giam_thi(request.user)):
             return result(False, _('Chỉ in được bài bạn đã nộp trong kỳ thi đang diễn ra.'))
         cp = None
 
@@ -1098,7 +1116,10 @@ def print_page(request):
     # Nhân viên in được cả khi không ở trong kỳ thi nào: họ cần in tài liệu điều hành
     # và cần thử đường in trước giờ thi. Lúc đó chỉ có ô dán mã, không có danh sách bài
     # nộp và không áp hạn mức của đội nào.
-    nhan_vien = request.user.is_staff
+    # Người trực thi mới là người cần in tài liệu và cần thử đường in trước giờ thi,
+    # mà giám thị thì cố ý KHÔNG phải staff (hàng đợi in gác theo quyền, không theo cờ).
+    # Gác bằng is_staff là khoá đúng những người cần dùng nhất.
+    nhan_vien = request.user.is_staff or _co_quyen_giam_thi(request.user)
     ctx['nhan_vien_ngoai_ky_thi'] = cp is None and nhan_vien
     if cp is None and not nhan_vien:
         ctx['loi'] = _('Bạn không ở trong kỳ thi nào đang diễn ra. Vào kỳ thi và bấm '
@@ -1253,10 +1274,15 @@ def war_action(request, pk, hanh_dong):
         # Tin đã thu hồi thì không còn việc gì để làm với nó nữa, nên tính luôn là
         # xong. Không làm vậy thì nó nằm mãi trong bộ lọc "chỉ việc chưa xong" và
         # người trực thi cứ thấy một việc tồn mà mở ra thì trống.
+        # Nếu trước đó đã có người tích xong thật thì giữ nguyên dấu vết của họ,
+        # thu hồi chỉ bổ sung trạng thái chứ không xoá công của người khác.
+        truong = ['retracted', 'retracted_by', 'done']
+        if not m.done:
+            m.done_by = profile
+            m.done_at = timezone.now()
+            truong += ['done_by', 'done_at']
         m.done = True
-        m.done_by = profile
-        m.done_at = timezone.now()
-        m.save(update_fields=['retracted', 'retracted_by', 'done', 'done_by', 'done_at'])
+        m.save(update_fields=truong)
     elif hanh_dong == 'xong':
         m.done = not m.done
         m.done_by = profile if m.done else None
@@ -1336,6 +1362,30 @@ def print_mark(request, pk):
     pr = get_object_or_404(PrintRequest, pk=pk)
     if pr.status == PrintRequest.QUEUED:
         pr.danh_dau_da_in(request.user.profile)
+    return HttpResponseRedirect(request.POST.get('next') or reverse('hcmus_print_queue'))
+
+
+@require_POST
+@user_passes_test(_co_quyen_giam_thi)
+def print_reject(request, pk):
+    """Giám thị đánh dấu một yêu cầu là KHÔNG in được, và hoàn lại trang cho đội.
+
+    Cần cái này vì hạn mức là đường một chiều: yêu cầu vừa vào hàng đợi đã trừ trang
+    ngay, mà đội bấm nhầm thì không ai gỡ hộ được ngoài superuser. Trạng thái REJECTED
+    vốn đã nằm ngoài phép tính hạn mức nên chuyển sang đó là hoàn trang, đồng thời vẫn
+    giữ lại dòng ghi để biết đã có chuyện gì.
+    """
+    from django.http import HttpResponseRedirect
+    from hcmus.models import PrintRequest
+
+    pr = get_object_or_404(PrintRequest, pk=pk)
+    if pr.status == PrintRequest.QUEUED:
+        pr.status = PrintRequest.REJECTED
+        pr.printed_by = request.user.profile
+        pr.printed_at = timezone.now()
+        ly_do = (request.POST.get('ly_do') or '').strip()
+        pr.error = (ly_do or _('Giám thị huỷ, đã hoàn trang cho đội'))[:300]
+        pr.save(update_fields=['status', 'printed_by', 'printed_at', 'error'])
     return HttpResponseRedirect(request.POST.get('next') or reverse('hcmus_print_queue'))
 
 

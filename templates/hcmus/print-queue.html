@@ -92,6 +92,16 @@
                             <input type="hidden" name="next" value="{{ request.get_full_path() }}">
                             <button type="submit" class="button">{{ _('Đã in') }}</button>
                         </form>
+                        {# Huỷ và hoàn trang: hạn mức trừ ngay khi yêu cầu vào hàng đợi,
+                           nên đội bấm nhầm sẽ mất trang nếu giám thị không gỡ được. #}
+                        <form method="post" action="{{ url('hcmus_print_reject', it.id) }}"
+                              style="display: inline;"
+                              onsubmit="return confirm('{{ _('Huỷ bản in này và hoàn lại trang cho đội?') }}');">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                            <button type="submit" class="button" style="background: #8a6d3b;"
+                                    title="{{ _('Hoàn lại số trang vào hạn mức của đội') }}">{{ _('Không in được') }}</button>
+                        </form>
                     {% endif %}
                 </td>
             </tr>

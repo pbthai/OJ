@@ -15,9 +15,15 @@
         document.addEventListener('compositionstart', function () { lanGoCuoi = Date.now(); }, true);
 
         function dangBan() {
+            // Chỉ ô gõ được chữ mới đáng hoãn. Con trỏ đậu ở ô chọn kỳ thi hay ô tích
+            // "chỉ việc chưa xong" thì tải lại chẳng mất gì, mà tính chúng là "đang gõ"
+            // sẽ làm trang đứng im vĩnh viễn và không ai biết vì sao.
+            var GO_DUOC = ['text', 'search', 'url', 'email', 'tel', 'password', 'number'];
             var el = document.activeElement;
-            if (el && /^(TEXTAREA|INPUT|SELECT)$/.test(el.tagName)
-                && el.type !== 'submit' && el.type !== 'button') return true;
+            if (el && (el.tagName === 'TEXTAREA' || el.isContentEditable
+                       || (el.tagName === 'INPUT' && GO_DUOC.indexOf((el.type || 'text').toLowerCase()) >= 0))) {
+                return true;
+            }
             if (lanGoCuoi && Date.now() - lanGoCuoi < IM_LANG) return true;
             var o = document.querySelectorAll('textarea, input[type="text"], input:not([type])');
             for (var i = 0; i < o.length; i++) {

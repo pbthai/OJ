@@ -39,6 +39,8 @@ urlpatterns = [
     path('hang-doi-in/', views.print_queue, name='hcmus_print_queue'),
     path('hang-doi-in/<int:pk>/tai-ve.pdf', views.print_download, name='hcmus_print_download'),
     path('hang-doi-in/<int:pk>/da-in/', views.print_mark, name='hcmus_print_mark'),
+    path('hang-doi-in/<int:pk>/khong-in-duoc/', views.print_reject,
+         name='hcmus_print_reject'),
     # ĐẶT CUỐI CÙNG: bắt mọi đường dẫn một cấp còn lại (vd /pretest/). Phải nằm sau
     # tất cả URL khác, nếu không nó nuốt mất các trang bên trên.
     path('<slug:slug>/', views.landing_page, name='hcmus_landing'),

@@ -26,8 +26,9 @@
         </p>
     {% endif %}
 
+    {% if not nhan_vien_ngoai_ky_thi %}
     <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start;">
-        <div style="flex: 1 1 320px; min-width: 300px;{% if nhan_vien_ngoai_ky_thi %}display: none;{% endif %}">
+        <div style="flex: 1 1 320px; min-width: 300px;">
             <h3 style="margin: 0 0 8px;">{{ _('Bài nộp của bạn') }}</h3>
             {% if bai_nop %}
             <table class="table" style="width: 100%;">
@@ -84,9 +85,10 @@
             {% endif %}
         </div>
     </div>
+    {% endif %}
 
     {% if form %}
-    <details style="margin-top: 22px;">
+    <details style="margin-top: 22px;"{% if nhan_vien_ngoai_ky_thi %} open{% endif %}>
         <summary style="cursor: pointer; font-weight: 600;">
             {{ _('Hoặc dán mã nguồn để in (dùng khi mã chưa nộp thành bài)') }}
         </summary>
