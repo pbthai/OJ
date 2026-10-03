@@ -4,7 +4,27 @@
     {# Tự làm mới để giám thị không phải bấm F5 suốt buổi thi. Chỉ làm mới khi
        đang xem việc CHƯA in, để đang thao tác thì không bị giật trang. #}
     {% if tt == 'Q' %}
-        <script>setTimeout(function () { location.reload(); }, 20000);</script>
+        {# Tự làm mới để giám thị không phải bấm F5. Hoãn khi họ đang thao tác, nếu
+           không thì đang chọn phòng trong ô lọc hoặc đang gõ là bị tải lại mất. Cùng
+           luật với phòng dã chiến. #}
+        <script>
+        (function () {
+            var CHU_KY = 20000, IM_LANG = 15000, lanCham = 0;
+            var GO_DUOC = ['text', 'search', 'url', 'email', 'tel', 'password', 'number'];
+            document.addEventListener('input', function () { lanCham = Date.now(); }, true);
+            document.addEventListener('change', function () { lanCham = Date.now(); }, true);
+            function dangBan() {
+                var el = document.activeElement;
+                if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable
+                           || (el.tagName === 'INPUT'
+                               && GO_DUOC.indexOf((el.type || 'text').toLowerCase()) >= 0))) {
+                    return true;
+                }
+                return lanCham && Date.now() - lanCham < IM_LANG;
+            }
+            setInterval(function () { if (!dangBan()) location.reload(); }, CHU_KY);
+        })();
+        </script>
     {% endif %}
 {% endblock %}
 
@@ -82,9 +102,8 @@
                 <td>{{ it.get_status_display() }}{% if it.printed_by %}
                     <div style="font-size: .82em; opacity: .7;">{{ it.printed_by }}</div>{% endif %}</td>
                 <td style="white-space: nowrap;">
-                    {% if it.status != 'R' %}
-                        <a class="button" href="{{ url('hcmus_print_download', it.id) }}">{{ _('Tải PDF') }}</a>
-                    {% endif %}
+                    {# Tải về được ở mọi trạng thái: bản bị huỷ vì kẹt giấy vẫn cần in lại. #}
+                    <a class="button" href="{{ url('hcmus_print_download', it.id) }}">{{ _('Tải PDF') }}</a>
                     {% if it.status == 'Q' %}
                         <form method="post" action="{{ url('hcmus_print_mark', it.id) }}"
                               style="display: inline;">

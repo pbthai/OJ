@@ -702,6 +702,32 @@ class UserProblemSubmissions(ConditionalUserTabMixin, UserMixin, ProblemSubmissi
         return context
 
 
+def _co_quyen_xem_mot_bai_nop(request, submission):
+    """Có được xem DÒNG trạng thái của riêng bài nộp này không.
+
+    Chốt của lõi vnoj ngay trên chỉ hỏi "có xem được BÀI TẬP không", mà với người đang
+    dự một kỳ thi thì Problem.is_accessible_by trả True cho mọi bài trong kỳ thi đó.
+    Nghĩa là một đội đoán id là đọc được verdict của đội khác theo thời gian thực: vô
+    hiệu cả cờ "không hiện danh sách bài nộp" lẫn việc đóng băng bảng xếp hạng ở giờ
+    cuối, đúng thứ mà một kỳ ICPC dựa vào. Ở đây hỏi thêm một câu: bài nộp này có phải
+    của chính người xem không, nếu không thì kỳ thi của nó có cho xem danh sách bài nộp
+    đầy đủ không.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return False
+    if submission.user_id == request.profile.id:
+        return True
+    if user.has_perm('judge.view_all_submission'):
+        return True
+    if submission.problem.is_editable_by(user):
+        return True
+    contest = submission.contest_object
+    if contest is not None:
+        return contest.can_see_full_submission_list(user)
+    return True
+
+
 def single_submission(request):
     request.no_profile_update = True
     if 'id' not in request.GET or not request.GET['id'].isdigit():
@@ -714,6 +740,8 @@ def single_submission(request):
     authenticated = request.user.is_authenticated
     submission = get_object_or_404(submission_related(Submission.objects.all()), id=int(request.GET['id']))
     if not submission.problem.is_accessible_by(request.user):
+        raise Http404()
+    if not _co_quyen_xem_mot_bai_nop(request, submission):
         raise Http404()
 
     if authenticated:

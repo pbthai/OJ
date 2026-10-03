@@ -1129,7 +1129,9 @@ def _bot_bao_yeu_cau_in(sender, instance, created, **kwargs):
     if not created or instance.status != PrintRequest.QUEUED:
         return
     from django.urls import reverse
-    bot_noi(instance.contest, 'print',
+    # Gắn id vào nhãn sự kiện để sau này tìm lại đúng tin của bản in này mà không phải
+    # thêm khoá ngoại (và một migration) giữa đêm trước kỳ thi. Nhãn vẫn đọc được.
+    bot_noi(instance.contest, 'print#%d' % instance.id,
             'Yêu cầu in: %s — phòng %s — %s (%d trang)' % (
                 instance.team or instance.profile, instance.room or '?',
                 instance.problem or '?', instance.pages),

@@ -1338,8 +1338,10 @@ def print_download(request, pk):
     from hcmus.models import PrintRequest
 
     pr = get_object_or_404(PrintRequest, pk=pk)
-    if pr.status == PrintRequest.REJECTED:
-        raise Http404('Yêu cầu này đã bị từ chối vì vượt trần số trang.')
+    # Trạng thái từ chối nay có hai nguồn: quá trần trang, và giám thị bấm "không in
+    # được" (kẹt giấy, in hỏng). Khoá tải về theo trạng thái sẽ cướp mất bản in của
+    # đúng tình huống thứ hai, nên cho tải về mọi trạng thái; in hay không là việc của
+    # giám thị, bản PDF dựng lại từ mã nguồn đã lưu nên tải bao nhiêu lần cũng được.
     try:
         pdf, _pages = printing.render_request_pdf(pr)
     except Exception as e:  # noqa: BLE001
@@ -1362,7 +1364,23 @@ def print_mark(request, pk):
     pr = get_object_or_404(PrintRequest, pk=pk)
     if pr.status == PrintRequest.QUEUED:
         pr.danh_dau_da_in(request.user.profile)
+        _tat_tin_bot_cua_ban_in(pr, request.user.profile)
     return HttpResponseRedirect(request.POST.get('next') or reverse('hcmus_print_queue'))
+
+
+def _tat_tin_bot_cua_ban_in(pr, profile):
+    """Tích xong tin bot đã báo yêu cầu in này.
+
+    Mỗi yêu cầu in sinh một tin bot trong phòng dã chiến với done=False. Xử lý xong bản
+    in mà tin bot vẫn nằm đó thì bộ đếm "việc chưa xong" chỉ tăng chứ không bao giờ
+    giảm, và tới trưa thì bộ lọc việc trở nên vô dụng đúng lúc cần nó nhất.
+    """
+    from django.utils import timezone
+    from hcmus.models import WarMessage
+
+    (WarMessage.objects
+     .filter(kind=WarMessage.BOT, event='print#%d' % pr.id, done=False)
+     .update(done=True, done_by=profile, done_at=timezone.now()))
 
 
 @require_POST
@@ -1386,6 +1404,7 @@ def print_reject(request, pk):
         ly_do = (request.POST.get('ly_do') or '').strip()
         pr.error = (ly_do or _('Giám thị huỷ, đã hoàn trang cho đội'))[:300]
         pr.save(update_fields=['status', 'printed_by', 'printed_at', 'error'])
+        _tat_tin_bot_cua_ban_in(pr, request.user.profile)
     return HttpResponseRedirect(request.POST.get('next') or reverse('hcmus_print_queue'))
 
 
