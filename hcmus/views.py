@@ -1219,17 +1219,36 @@ def _war_danh_sach(key, chi_viec):
     return list(qs.order_by('-created')[:200])[::-1]
 
 
+def _duong_ve_phong(key, chi_viec):
+    """Đường quay về phòng dã chiến, giữ nguyên bộ lọc đang xem.
+
+    Phải dựng từ tên route chứ KHÔNG lấy request.get_full_path(). Khối tin được
+    render ở hai nơi: lần tải trang thì request là /phong-da-chien/, nhưng mỗi lần
+    máy chủ đẩy sự kiện thì nó render lại qua war_feed, lúc đó get_full_path() là
+    /phong-da-chien/tin/. Ô next trong các form thao tác mà lấy đường đó thì bấm
+    "Tích đã xong" xong người trực thi rơi vào khối HTML trần, không có giao diện.
+    """
+    tv = []
+    if key:
+        tv.append('contest=' + key)
+    if chi_viec:
+        tv.append('viec=1')
+    return reverse('hcmus_war_room') + (('?' + '&'.join(tv)) if tv else '')
+
+
 @user_passes_test(_co_quyen_truc_thi)
 def war_feed(request):
     """Trả về RIÊNG khối tin, để trang thay tại chỗ khi máy chủ đẩy sự kiện xuống.
 
     Không trả cả trang vì ô soạn tin phải giữ nguyên chữ người dùng đang gõ.
     """
+    key = (request.GET.get('contest') or '').strip()
+    chi_viec = request.GET.get('viec') == '1'
     return render(request, 'hcmus/war-chat.html', {
-        'items': _war_danh_sach((request.GET.get('contest') or '').strip(),
-                                request.GET.get('viec') == '1'),
-        'contest': (request.GET.get('contest') or '').strip(),
-        'chi_viec': request.GET.get('viec') == '1',
+        'items': _war_danh_sach(key, chi_viec),
+        'contest': key,
+        'chi_viec': chi_viec,
+        'duong_ve': _duong_ve_phong(key, chi_viec),
     })
 
 
@@ -1302,6 +1321,7 @@ def war_room(request):
         'tra_loi': tra_loi,
         'sua': sua,
         'truy_van': truy_van,
+        'duong_ve': _duong_ve_phong(key, chi_viec),
         'cac_contest': cac_contest,
         'contest': key,
         'chi_viec': chi_viec,

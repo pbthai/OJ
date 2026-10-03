@@ -7,16 +7,23 @@
 {% for m in items %}
 <div class="war-tin{% if m.done %} war-xong{% endif %}" data-id="{{ m.id }}"
      style="padding: 4px 2px; line-height: 1.5;">
-    <span class="war-gio" style="font-size: .82em;">{{ m.created|date("H:i") }}</span>
-    <b>{% if m.kind == 'B' %}bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}:</b>
-    {% if m.parent %}<span class="war-phu" style="font-size: .84em;">↳ {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
-    {% if m.retracted %}
-        <i class="war-phu">{{ _('đã xoá') }}</i>
-    {% else %}
-        <span{% if m.noi_bat %} class="war-noibat"{% endif %}>{{ m.body }}</span>
-        {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
-    {% endif %}
-    {% if m.done %}<span class="war-xongdau" style="font-size: .8em;">✓ {{ _('xong') }}</span>{% endif %}
+    {# Phần nội dung phải nằm trong một bọc riêng, KHÔNG gộp chung với menu thao tác.
+       Tin đã tích xong được làm mờ bằng opacity, mà opacity nhỏ hơn 1 tạo ra một
+       stacking context: thứ gì nằm trong đó thì z-index bị thu vào đó. Menu thả xuống
+       là position:fixed z-index 3000; để nó trong vùng mờ thì nó bị phần trang vẽ sau
+       che mất, và người dùng thấy như menu không mở. Xem chú thích ở hcmus-theme.scss. #}
+    <span class="war-noi-dung">
+        <span class="war-gio" style="font-size: .82em;">{{ m.created|date("H:i") }}</span>
+        <b>{% if m.kind == 'B' %}bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}:</b>
+        {% if m.parent %}<span class="war-phu" style="font-size: .84em;">↳ {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
+        {% if m.retracted %}
+            <i class="war-phu">{{ _('đã xoá') }}</i>
+        {% else %}
+            <span{% if m.noi_bat %} class="war-noibat"{% endif %}>{{ m.body }}</span>
+            {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
+        {% endif %}
+        {% if m.done %}<span class="war-xongdau" style="font-size: .8em;">✓ {{ _('xong') }}</span>{% endif %}
+    </span>
 
     {% if not m.retracted %}
     {# Menu thả xuống thay cho dãy nút nằm dưới tin: dùng <details> nên không cần JS
@@ -29,7 +36,7 @@
                                 ('xong', m.done and _('Bỏ tích') or _('Tích đã xong'))) %}
                 <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                    <input type="hidden" name="next" value="{{ duong_ve }}">
                     <button type="submit" class="war-mi">{{ nhan }}</button>
                 </form>
             {% endfor %}
@@ -40,7 +47,7 @@
                 <form method="post" action="{{ url('hcmus_war_action', m.id, 'thu-hoi') }}"
                       onsubmit="return confirm('{{ _('Xoá tin này?') }}');">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                    <input type="hidden" name="next" value="{{ duong_ve }}">
                     <button type="submit" class="war-mi war-mi-xoa">{{ _('Xoá') }}</button>
                 </form>
             {% endif %}

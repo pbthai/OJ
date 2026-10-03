@@ -69,7 +69,16 @@
     function xuongDay() { if (khung) khung.scrollTop = khung.scrollHeight; }
     function oDay() { return !khung || khung.scrollHeight - khung.scrollTop - khung.clientHeight < 60; }
 
+    // Nạp lại khối tin là gán thẳng innerHTML, tức là mọi <details> đang mở bị dựng
+    // lại ở trạng thái đóng. Trong giờ thi bot báo việc liên tục nên menu của người
+    // trực thi sẽ biến mất ngay dưới tay họ, và tệ hơn là biến mất đúng lúc họ đang
+    // bấm. Nên khi còn menu mở thì hoãn, đóng menu xong mới nạp bù.
+    var hoanNap = false;
+    function dangMoMenu() { return !!document.querySelector('details.war-menu[open]'); }
+
     function napLai() {
+        if (dangMoMenu()) { hoanNap = true; return; }
+        hoanNap = false;
         fetch(duongDan, {credentials: 'same-origin'})
             .then(function (r) { return r.ok ? r.text() : null; })
             .then(function (html) {
@@ -80,6 +89,8 @@
             })
             .catch(function () {});
     }
+
+    function napBuNeuCan() { if (hoanNap && !dangMoMenu()) napLai(); }
 
     xuongDay();
 
@@ -111,9 +122,9 @@
     }
     document.addEventListener('toggle', function (e) {
         var d = e.target;
-        if (d.tagName === 'DETAILS' && d.classList.contains('war-menu') && d.open) {
-            datChoMenu(d);
-        }
+        if (d.tagName !== 'DETAILS' || !d.classList.contains('war-menu')) return;
+        if (d.open) datChoMenu(d);
+        else setTimeout(napBuNeuCan, 0);   // đóng rồi thì nạp bù phần đã hoãn
     }, true);
     // Cuộn thì toạ độ cũ hết đúng; đóng menu cho gọn thay vì để nó trôi lơ lửng.
     ['scroll', 'resize'].forEach(function (ev) {
@@ -121,6 +132,7 @@
             document.querySelectorAll('details.war-menu[open]').forEach(function (d) {
                 d.removeAttribute('open');
             });
+            napBuNeuCan();
         }, true);
     });
 
