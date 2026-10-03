@@ -262,9 +262,11 @@ ul.pagination > .disabled-page > {
     }
 
     .war-menu-noi {
-        position: absolute;
-        z-index: 30;
-        right: 0;
+        // Khung chat có overflow-y:auto nên nó CẮT mọi thứ định vị tuyệt đối bên trong.
+        // Dùng position:fixed để thoát ra khỏi vùng cắt đó; vị trí do JS đặt theo chỗ
+        // của nút ba chấm, và tự lật lên trên hoặc sang trái khi sát biên màn hình.
+        position: fixed;
+        z-index: 3000;
         min-width: 150px;
         padding: 4px 0;
         border: 1px solid $color_primary25;

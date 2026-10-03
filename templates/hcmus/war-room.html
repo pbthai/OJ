@@ -93,6 +93,37 @@
         });
     });
 
+    // Menu dùng position:fixed để không bị khung chat cắt, nên phải tự đặt toạ độ.
+    // Mặc định thả xuống dưới và canh phải theo nút; hết chỗ bên dưới thì lật lên,
+    // tràn ra ngoài mép trái thì đẩy vào.
+    function datChoMenu(d) {
+        var nut = d.querySelector('summary');
+        var o = d.querySelector('.war-menu-noi');
+        if (!nut || !o) return;
+        o.style.left = o.style.top = '0px';      // đo kích thước thật trước khi đặt
+        var r = nut.getBoundingClientRect();
+        var w = o.offsetWidth, h = o.offsetHeight;
+        var le = 8, tr = 8;
+        var x = Math.min(Math.max(r.right - w, le), window.innerWidth - w - le);
+        var y = (r.bottom + h + tr <= window.innerHeight) ? r.bottom + 4 : r.top - h - 4;
+        o.style.left = Math.round(x) + 'px';
+        o.style.top = Math.round(Math.max(y, tr)) + 'px';
+    }
+    document.addEventListener('toggle', function (e) {
+        var d = e.target;
+        if (d.tagName === 'DETAILS' && d.classList.contains('war-menu') && d.open) {
+            datChoMenu(d);
+        }
+    }, true);
+    // Cuộn thì toạ độ cũ hết đúng; đóng menu cho gọn thay vì để nó trôi lơ lửng.
+    ['scroll', 'resize'].forEach(function (ev) {
+        window.addEventListener(ev, function () {
+            document.querySelectorAll('details.war-menu[open]').forEach(function (d) {
+                d.removeAttribute('open');
+            });
+        }, true);
+    });
+
     if (window.event_dispatcher) {
         window.event_dispatcher.on('war_room', function () { napLai(); });
         window.event_dispatcher.onwsclose(function () {
