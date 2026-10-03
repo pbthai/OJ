@@ -73,12 +73,26 @@
     // lại ở trạng thái đóng. Trong giờ thi bot báo việc liên tục nên menu của người
     // trực thi sẽ biến mất ngay dưới tay họ, và tệ hơn là biến mất đúng lúc họ đang
     // bấm. Nên khi còn menu mở thì hoãn, đóng menu xong mới nạp bù.
+    // Hoãn phải có TRẦN. Không có trần thì người trực thi mở menu rồi quay sang cửa
+    // sổ khác là phòng dã chiến đứng im vĩnh viễn, âm thầm, kể cả nhịp 30 giây cũng
+    // chỉ bật cờ rồi thoát. Giữa giờ thi đó là bỏ sót việc. Menu bị bỏ quên quá
+    // TRAN_HOAN thì đóng nó đi mà nạp, thà mất menu còn hơn mất tin.
     var hoanNap = false;
+    var lucMoMenu = 0;
+    var TRAN_HOAN = 20000;
     function dangMoMenu() { return !!document.querySelector('details.war-menu[open]'); }
 
     function napLai() {
-        if (dangMoMenu()) { hoanNap = true; return; }
+        var dangMo = dangMoMenu();
+        if (dangMo && Date.now() - lucMoMenu < TRAN_HOAN) { hoanNap = true; return; }
+        // Tắt cờ TRƯỚC khi đóng menu: việc đóng cũng phát sự kiện toggle, mà toggle
+        // gọi napBuNeuCan, để cờ bật thì thành hai lượt fetch chồng nhau.
         hoanNap = false;
+        if (dangMo) {
+            document.querySelectorAll('details.war-menu[open]').forEach(function (d) {
+                d.removeAttribute('open');
+            });
+        }
         fetch(duongDan, {credentials: 'same-origin'})
             .then(function (r) { return r.ok ? r.text() : null; })
             .then(function (html) {
@@ -123,7 +137,7 @@
     document.addEventListener('toggle', function (e) {
         var d = e.target;
         if (d.tagName !== 'DETAILS' || !d.classList.contains('war-menu')) return;
-        if (d.open) datChoMenu(d);
+        if (d.open) { lucMoMenu = Date.now(); datChoMenu(d); }
         else setTimeout(napBuNeuCan, 0);   // đóng rồi thì nạp bù phần đã hoãn
     }, true);
     // Cuộn thì toạ độ cũ hết đúng; đóng menu cho gọn thay vì để nó trôi lơ lửng.
