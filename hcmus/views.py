@@ -1200,6 +1200,39 @@ def _co_quyen_truc_thi(user):
     return user.is_authenticated and user.has_perm('hcmus.use_war_room')
 
 
+def _war_danh_sach(key, chi_viec):
+    """Danh sách tin của phòng dã chiến, dùng chung cho trang và cho đường lấy lại khối.
+
+    Một dòng chat phẳng, không tách theo luồng trả lời: trực thi cần đọc lướt theo thời
+    gian chứ không cần cây hội thoại. Lấy 200 tin gần nhất rồi đảo lại để cũ ở trên, mới
+    ở dưới, giống mọi khung chat.
+    """
+    from hcmus.models import WarMessage
+
+    qs = (WarMessage.objects
+          .select_related('author__user', 'done_by__user', 'contest', 'parent__author__user'))
+    if key:
+        qs = qs.filter(contest__key=key)
+    if chi_viec:
+        # retracted=False phòng cho các tin thu hồi từ trước lúc có luật "thu hồi là xong".
+        qs = qs.filter(done=False, retracted=False, kind=WarMessage.BOT)
+    return list(qs.order_by('-created')[:200])[::-1]
+
+
+@user_passes_test(_co_quyen_truc_thi)
+def war_feed(request):
+    """Trả về RIÊNG khối tin, để trang thay tại chỗ khi máy chủ đẩy sự kiện xuống.
+
+    Không trả cả trang vì ô soạn tin phải giữ nguyên chữ người dùng đang gõ.
+    """
+    return render(request, 'hcmus/war-chat.html', {
+        'items': _war_danh_sach((request.GET.get('contest') or '').strip(),
+                                request.GET.get('viec') == '1'),
+        'contest': (request.GET.get('contest') or '').strip(),
+        'chi_viec': request.GET.get('viec') == '1',
+    })
+
+
 @user_passes_test(_co_quyen_truc_thi)
 def war_room(request):
     """Phòng dã chiến: chat của trực thi cộng bảng tin của bot, chung một dòng thời gian.
@@ -1228,22 +1261,22 @@ def war_room(request):
                     # cho trực thi, lồng sâu hơn thì đọc rối trong lúc gấp.
                     cha = cha.parent or cha
                     ct = cha.contest
-            WarMessage.objects.create(contest=ct, author=profile, parent=cha,
-                                      kind=WarMessage.CHAT, body=noi_dung[:2000])
+            sua_id = (request.POST.get('sua') or '').strip()
+            if sua_id.isdigit():
+                # Chỉ sửa tin chat của chính mình, và không sửa tin bot: tin bot là bản
+                # ghi việc đã xảy ra, sửa được thì mất tác dụng đối chiếu.
+                cu_tin = WarMessage.objects.filter(pk=int(sua_id), author=profile,
+                                                   kind=WarMessage.CHAT,
+                                                   retracted=False).first()
+                if cu_tin is not None:
+                    cu_tin.body = noi_dung[:2000]
+                    cu_tin.save(update_fields=['body'])
+            else:
+                WarMessage.objects.create(contest=ct, author=profile, parent=cha,
+                                          kind=WarMessage.CHAT, body=noi_dung[:2000])
         return HttpResponseRedirect(request.get_full_path())
 
-    # Một dòng chat phẳng, không tách thành khối theo luồng trả lời: trực thi cần đọc
-    # lướt theo thời gian chứ không cần cây hội thoại. Trả lời vẫn giữ, nhưng hiện ngay
-    # trong dòng bằng một dấu nhắc nhỏ tới tin được trả lời.
-    qs = (WarMessage.objects
-          .select_related('author__user', 'done_by__user', 'contest', 'parent__author__user'))
-    if key:
-        qs = qs.filter(contest__key=key)
-    if chi_viec:
-        # retracted=False phòng cho các tin thu hồi từ trước lúc có luật "thu hồi là xong".
-        qs = qs.filter(done=False, retracted=False, kind=WarMessage.BOT)
-    # Lấy 200 tin gần nhất rồi đảo lại: cũ ở trên, mới ở dưới, giống mọi khung chat.
-    items = list(qs.order_by('-created')[:200])[::-1]
+    items = _war_danh_sach(key, chi_viec)
 
     cac_contest = list(Contest.objects.filter(war_messages__isnull=False)
                        .values_list('key', flat=True).distinct())
@@ -1251,11 +1284,24 @@ def war_room(request):
     tra_loi_id = (request.GET.get('tra_loi') or '').strip()
     tra_loi = (WarMessage.objects.select_related('author__user')
                .filter(pk=int(tra_loi_id)).first()) if tra_loi_id.isdigit() else None
+    sua_id = (request.GET.get('sua') or '').strip()
+    sua = (WarMessage.objects.filter(pk=int(sua_id), author=profile,
+                                     kind=WarMessage.CHAT, retracted=False).first()
+           if sua_id.isdigit() else None)
+    # Đường để trang hỏi lại riêng khối tin, giữ nguyên bộ lọc đang xem.
+    tv = []
+    if key:
+        tv.append('contest=' + key)
+    if chi_viec:
+        tv.append('viec=1')
+    truy_van = ('?' + '&'.join(tv)) if tv else ''
 
     return render(request, 'hcmus/war-room.html', {
         'title': _('Phòng dã chiến'),
         'items': items,
         'tra_loi': tra_loi,
+        'sua': sua,
+        'truy_van': truy_van,
         'cac_contest': cac_contest,
         'contest': key,
         'chi_viec': chi_viec,

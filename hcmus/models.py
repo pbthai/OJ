@@ -1110,6 +1110,25 @@ class LandingPage(models.Model):
 
 # ---------------------------------------------------------------- bot phòng dã chiến
 
+def _day_su_kien_phong():
+    """Báo cho các trình duyệt đang mở phòng dã chiến rằng có thay đổi.
+
+    Chỉ gửi một tín hiệu rỗng, không gửi nội dung: trang tự hỏi lại khối tin qua đường
+    riêng, nên không phải lo chuyện ai được xem gì ở tầng websocket. Nuốt lỗi vì đây là
+    phần phụ trợ, kênh sự kiện chết thì trang vẫn còn lưới đỡ hỏi lại theo chu kỳ.
+    """
+    try:
+        from judge import event_poster as event
+        event.post('war_room', {'type': 'war'})
+    except Exception:       # noqa: BLE001
+        pass
+
+
+@receiver(post_save, sender='hcmus.WarMessage')
+def _bao_phong_da_chien(sender, instance, **kwargs):
+    _day_su_kien_phong()
+
+
 def bot_noi(contest, event, body, url=''):
     """Bot đăng một dòng vào phòng dã chiến.
 

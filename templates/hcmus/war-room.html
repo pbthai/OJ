@@ -1,42 +1,17 @@
 {% extends "base.html" %}
 
-{% block js_media %}
-    {# Tự làm mới để trực thi không phải bấm F5. Dừng làm mới khi đang gõ, nếu không
-       thì đang soạn tin sẽ bị mất chữ. Xem hàm dangBan() bên dưới. #}
-    <script>
-    (function () {
-        // Luật cũ chỉ canh ô soạn tin chính (#war-body), nên gõ vào ô trả lời hay ô
-        // lọc là vẫn bị tải lại giữa chừng và mất chữ. Nay chặn theo ba dấu hiệu, chỉ
-        // cần một dấu hiệu đúng là hoãn: con trỏ đang ở trong một ô nhập bất kỳ, vừa
-        // gõ trong 30 giây qua, hoặc còn chữ dở trong một ô nào đó.
-        var CHU_KY = 15000, IM_LANG = 30000;
-        var lanGoCuoi = 0;
-        document.addEventListener('input', function () { lanGoCuoi = Date.now(); }, true);
-        document.addEventListener('compositionstart', function () { lanGoCuoi = Date.now(); }, true);
-
-        function dangBan() {
-            // Chỉ ô gõ được chữ mới đáng hoãn. Con trỏ đậu ở ô chọn kỳ thi hay ô tích
-            // "chỉ việc chưa xong" thì tải lại chẳng mất gì, mà tính chúng là "đang gõ"
-            // sẽ làm trang đứng im vĩnh viễn và không ai biết vì sao.
-            var GO_DUOC = ['text', 'search', 'url', 'email', 'tel', 'password', 'number'];
-            var el = document.activeElement;
-            if (el && (el.tagName === 'TEXTAREA' || el.isContentEditable
-                       || (el.tagName === 'INPUT' && GO_DUOC.indexOf((el.type || 'text').toLowerCase()) >= 0))) {
-                return true;
-            }
-            if (lanGoCuoi && Date.now() - lanGoCuoi < IM_LANG) return true;
-            var o = document.querySelectorAll('textarea, input[type="text"], input:not([type])');
-            for (var i = 0; i < o.length; i++) {
-                if ((o[i].value || '').trim() !== '') return true;
-            }
-            return false;
-        }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            setInterval(function () { if (!dangBan()) location.reload(); }, CHU_KY);
-        });
-    })();
-    </script>
+{% block media %}
+<style>
+    /* Nút thao tác phải nhìn thấy được thì mới bấm. Bản trước để trong suốt và ăn theo
+       màu chữ xung quanh nên gần như vô hình, và các form bị xuống dòng thành khối. */
+    .war-btn {
+        display: inline-block; margin: 0 1px; padding: 1px 7px;
+        font-size: .78em; line-height: 1.6; border: 1px solid #ccd4dc; border-radius: 10px;
+        background: #f4f7fa; color: #2b5d87; cursor: pointer; text-decoration: none;
+        vertical-align: middle;
+    }
+    .war-btn:hover { background: #e4ecf4; color: #17405f; text-decoration: none; }
+</style>
 {% endblock %}
 
 {% block body %}
@@ -70,70 +45,71 @@
         <button type="submit" class="button">{{ _('Lọc') }}</button>
     </form>
 
-    {# Khung chat: cũ ở trên, mới ở dưới, cuộn xuống đáy khi mở trang. #}
+    {# Khung chat. Nội dung nằm trong war-chat.html để máy chủ đẩy sự kiện xuống thì
+       thay đúng khối này, khỏi tải lại cả trang. #}
     <div id="war-chat" style="border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px;
                               max-height: 62vh; overflow-y: auto; background: #fff;">
-        {% if not items %}
-            <div style="opacity: .6; padding: 12px 0;">{{ _('Chưa có tin nào.') }}</div>
-        {% endif %}
-        {% for m in items %}
-        <div style="padding: 3px 0; line-height: 1.45;{% if m.done %}opacity: .55;{% endif %}">
-            <span style="font-size: .82em; opacity: .55;">{{ m.created|date("H:i") }}</span>
-            <b>{% if m.kind == 'B' %}bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}:</b>
-            {% if m.parent %}<span style="font-size: .84em; opacity: .6;">↳
-                {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
-            {% if m.retracted %}
-                <i style="opacity: .55;">{{ _('đã thu hồi') }}</i>
-            {% else %}
-                <span {% if m.noi_bat %}style="font-weight: 700; color: #c0392b;"{% endif %}>{{ m.body }}</span>
-                {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
-            {% endif %}
-            {% if m.done %}<span style="font-size: .8em; color: #2e9e4f;">✓</span>{% endif %}
-            {% if not m.retracted %}
-                <span style="font-size: .78em; opacity: .55; white-space: nowrap;">
-                {% for ma, nhan in (('noi-bat', m.noi_bat and _('bỏ đậm') or _('làm đậm')), ('xong', m.done and _('bỏ tích') or _('xong')), ('thu-hoi', _('thu hồi'))) %}
-                    {% if ma != 'thu-hoi' or m.author_id == request.profile.id or request.user.is_superuser %}
-                    <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}" style="display: inline;">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path() }}">
-                        <button type="submit" style="background: none; border: none; padding: 0 2px;
-                                cursor: pointer; color: inherit; font: inherit; text-decoration: underline;">{{ nhan }}</button>
-                    </form>
-                    {% endif %}
-                {% endfor %}
-                <form method="get" style="display: inline;">
-                    {% if contest %}<input type="hidden" name="contest" value="{{ contest }}">{% endif %}
-                    {% if chi_viec %}<input type="hidden" name="viec" value="1">{% endif %}
-                    <input type="hidden" name="tra_loi" value="{{ m.id }}">
-                    <button type="submit" style="background: none; border: none; padding: 0 2px;
-                            cursor: pointer; color: inherit; font: inherit; text-decoration: underline;">{{ _('trả lời') }}</button>
-                </form>
-                </span>
-            {% endif %}
-        </div>
-        {% endfor %}
+        {% include "hcmus/war-chat.html" %}
     </div>
+    <div id="war-trangthai" style="font-size: .82em; opacity: .6; margin-top: 4px;"></div>
 
-    {# Ô soạn tin đặt dưới khung chat, đúng chỗ tay đang ở khi đọc tin mới nhất. #}
     <form method="post" style="margin-top: 10px;">
         {% csrf_token %}
         {% if tra_loi %}
             <div style="font-size: .86em; margin-bottom: 4px;">
                 {{ _('Đang trả lời') }} <b>{{ tra_loi.author or _('(đã xoá)') }}</b>:
                 <i>{{ tra_loi.body|truncate(80) }}</i>
-                <a href="?{% if contest %}contest={{ contest }}&{% endif %}{% if chi_viec %}viec=1{% endif %}">{{ _('bỏ') }}</a>
+                <a href="?{% if contest %}contest={{ contest }}&amp;{% endif %}{% if chi_viec %}viec=1{% endif %}">{{ _('bỏ') }}</a>
             </div>
             <input type="hidden" name="parent" value="{{ tra_loi.id }}">
         {% endif %}
+        {% if sua %}
+            <div style="font-size: .86em; margin-bottom: 4px;">
+                {{ _('Đang sửa tin của bạn.') }}
+                <a href="?{% if contest %}contest={{ contest }}&amp;{% endif %}{% if chi_viec %}viec=1{% endif %}">{{ _('bỏ') }}</a>
+            </div>
+            <input type="hidden" name="sua" value="{{ sua.id }}">
+        {% endif %}
         <textarea name="body" id="war-body" rows="2" style="width: 100%;"
-                  placeholder="{{ _('Nhắn cho trực thi...') }}"></textarea>
-        <button type="submit" class="button" style="margin-top: 6px;">{{ _('Gửi') }}</button>
+                  placeholder="{{ _('Nhắn cho trực thi...') }}">{% if sua %}{{ sua.body }}{% endif %}</textarea>
+        <button type="submit" class="button" style="margin-top: 6px;">{% if sua %}{{ _('Lưu') }}{% else %}{{ _('Gửi') }}{% endif %}</button>
     </form>
 </div>
+
 <script>
-    (function () {
-        var o = document.getElementById('war-chat');
-        if (o) { o.scrollTop = o.scrollHeight; }
-    })();
+(function () {
+    var khung = document.getElementById('war-chat');
+    var bao = document.getElementById('war-trangthai');
+    var duongDan = '{{ url("hcmus_war_feed") }}{{ truy_van }}';
+
+    function xuongDay() { if (khung) khung.scrollTop = khung.scrollHeight; }
+    function oDay() { return !khung || khung.scrollHeight - khung.scrollTop - khung.clientHeight < 60; }
+
+    function napLai() {
+        fetch(duongDan, {credentials: 'same-origin'})
+            .then(function (r) { return r.ok ? r.text() : null; })
+            .then(function (html) {
+                if (html === null) return;
+                var cuoi = oDay();
+                khung.innerHTML = html;
+                if (cuoi) xuongDay();
+            })
+            .catch(function () {});
+    }
+
+    xuongDay();
+
+    // Đẩy: máy chủ phát một sự kiện mỗi khi có tin mới hoặc tin đổi trạng thái, trang
+    // chỉ nạp lại đúng khối tin. Ô soạn tin nằm ngoài khối nên chữ đang gõ không mất.
+    if (window.event_dispatcher) {
+        window.event_dispatcher.on('war_room', function () { napLai(); });
+        window.event_dispatcher.onwsclose(function () {
+            bao.textContent = '{{ _("Mất kết nối trực tiếp, đang kiểm theo chu kỳ.") }}';
+        });
+    }
+    // Lưới đỡ cho lúc websocket chết: hỏi lại sau mỗi 30 giây. Chỉ nạp khối tin, không
+    // tải lại trang, nên không cướp mất chữ đang gõ.
+    setInterval(napLai, 30000);
+})();
 </script>
 {% endblock %}
