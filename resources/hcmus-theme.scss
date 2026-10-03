@@ -284,7 +284,11 @@ ul.pagination > .disabled-page > {
         // Dùng position:fixed để thoát ra khỏi vùng cắt đó; vị trí do JS đặt theo chỗ
         // của nút ba chấm, và tự lật lên trên hoặc sang trái khi sát biên màn hình.
         position: fixed;
-        z-index: 3000;
+        // Phải cao hơn mọi thứ của trang. Mốc cần vượt là #contest-info (base.scss,
+        // hộp đếm giờ kéo thả được, z-index 100000, vị trí người dùng kéo được lưu
+        // trong localStorage nên nó có thể nằm ngay cạnh khung chat). Người trực thi
+        // mà đang theo dõi một kỳ thi thì hộp đó hiện ra và nuốt mất menu.
+        z-index: 100001;
         min-width: 150px;
         padding: 4px 0;
         border: 1px solid $color_primary25;
