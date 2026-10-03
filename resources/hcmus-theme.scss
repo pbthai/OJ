@@ -209,3 +209,63 @@ ul.pagination > .disabled-page > {
     border: 1px solid $color_primary25;
     border-radius: $widget_border_radius;
 }
+
+// ---------------------------------------------------------------- phòng dã chiến
+// Màu phải lấy từ biến theme chứ không ghi cứng: cùng một mã màu sáng trên nền tối
+// thì chói, trên nền sáng thì mờ, và người trực thi mỗi người một theme.
+#war-chat {
+    border: 1px solid $color_primary25;
+    border-radius: $widget_border_radius;
+    background-color: $color_primary0;
+    color: $color_primary100;
+}
+
+.war-tin {
+    border-bottom: 1px solid $color_primary25;
+
+    // Tin đã tích xong thì lùi về sau, ngược chiều với tin nổi bật.
+    &.war-xong { opacity: .5; }
+
+    .war-gio, .war-phu { color: $color_primary75; }
+}
+
+// Nổi bật: đậm và đỏ. Sắc đỏ phải đổi theo theme, đỏ đậm trên nền đen gần như đọc
+// không ra.
+.war-noibat {
+    font-weight: 700;
+    color: if($is_light_theme, #c0392b, #ff8a80);
+}
+
+.war-xongdau { color: if($is_light_theme, #1e7e34, #6fcf8d); }
+
+.war-btn {
+    display: inline-block;
+    margin: 0 1px;
+    padding: 1px 8px;
+    font-size: .78em;
+    line-height: 1.7;
+    vertical-align: middle;
+    cursor: pointer;
+    text-decoration: none;
+    border: 1px solid $color_primary25;
+    border-radius: 10px;
+    background-color: $color_primary5;
+    color: $color_link100;
+
+    &:hover, &:focus {
+        text-decoration: none;
+        background-color: $color_brand;
+        border-color: $color_brand;
+        color: #fff;
+    }
+}
+
+// Dải đếm việc chưa xong ở đầu phòng dã chiến.
+.war-dai {
+    border-radius: $widget_border_radius;
+    border-left: 6px solid;
+    background-color: $color_primary5;
+    color: $color_primary100;
+}
+.war-dai-cho  { border-left-color: if($is_light_theme, #e0900a, #e8a33d); }
+.war-dai-xong { border-left-color: if($is_light_theme, #2e9e4f, #6fcf8d); }

@@ -2,22 +2,21 @@
    đẩy sự kiện xuống thì trả về đúng khối này để thay tại chỗ. Giữ chung một bản để
    giao diện hai đường không lệch nhau. #}
 {% if not items %}
-    <div style="opacity: .6; padding: 12px 0;">{{ _('Chưa có tin nào.') }}</div>
+    <div class="war-phu" style="padding: 12px 0;">{{ _('Chưa có tin nào.') }}</div>
 {% endif %}
 {% for m in items %}
-<div class="war-tin" data-id="{{ m.id }}"
-     style="padding: 4px 2px; line-height: 1.5; border-bottom: 1px solid #f2f2f2;
-            {% if m.done %}opacity: .42;{% endif %}">
-    <span style="font-size: .82em; opacity: .55;">{{ m.created|date("H:i") }}</span>
+<div class="war-tin{% if m.done %} war-xong{% endif %}" data-id="{{ m.id }}"
+     style="padding: 4px 2px; line-height: 1.5;">
+    <span class="war-gio" style="font-size: .82em;">{{ m.created|date("H:i") }}</span>
     <b>{% if m.kind == 'B' %}bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}:</b>
-    {% if m.parent %}<span style="font-size: .84em; opacity: .6;">↳ {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
+    {% if m.parent %}<span class="war-phu" style="font-size: .84em;">↳ {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
     {% if m.retracted %}
-        <i style="opacity: .55;">{{ _('đã thu hồi') }}</i>
+        <i class="war-phu">{{ _('đã thu hồi') }}</i>
     {% else %}
-        <span {% if m.noi_bat %}style="font-weight: 700; color: #c0392b;"{% endif %}>{{ m.body }}</span>
+        <span{% if m.noi_bat %} class="war-noibat"{% endif %}>{{ m.body }}</span>
         {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
     {% endif %}
-    {% if m.done %}<span style="font-size: .8em; color: #2e9e4f;">✓ {{ _('xong') }}</span>{% endif %}
+    {% if m.done %}<span class="war-xongdau" style="font-size: .8em;">✓ {{ _('xong') }}</span>{% endif %}
 
     {% if not m.retracted %}
     <span class="war-nut" style="white-space: nowrap; margin-left: 6px;">

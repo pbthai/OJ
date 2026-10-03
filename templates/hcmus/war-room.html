@@ -1,30 +1,15 @@
 {% extends "base.html" %}
 
-{% block media %}
-<style>
-    /* Nút thao tác phải nhìn thấy được thì mới bấm. Bản trước để trong suốt và ăn theo
-       màu chữ xung quanh nên gần như vô hình, và các form bị xuống dòng thành khối. */
-    .war-btn {
-        display: inline-block; margin: 0 1px; padding: 1px 7px;
-        font-size: .78em; line-height: 1.6; border: 1px solid #ccd4dc; border-radius: 10px;
-        background: #f4f7fa; color: #2b5d87; cursor: pointer; text-decoration: none;
-        vertical-align: middle;
-    }
-    .war-btn:hover { background: #e4ecf4; color: #17405f; text-decoration: none; }
-</style>
-{% endblock %}
-
 {% block body %}
 <div style="max-width: 900px; margin-top: 12px;">
-    <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-                background: {% if con_viec %}#fff6e5{% else %}#eefaf0{% endif %};
-                border-left: 6px solid {% if con_viec %}#e0900a{% else %}#2e9e4f{% endif %};
-                padding: 10px 16px; border-radius: 6px; margin-bottom: 12px;">
+    <div class="war-dai {% if con_viec %}war-dai-cho{% else %}war-dai-xong{% endif %}"
+         style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+                padding: 10px 16px; margin-bottom: 12px;">
         <div style="font-size: 1.8em; font-weight: 700; line-height: 1;">{{ con_viec }}</div>
         <div style="font-size: .92em;">
             {% if con_viec %}{{ _('việc bot báo chưa tích hoàn thành') }}
             {% else %}{{ _('không còn việc nào chờ xử lý') }}{% endif %}
-            <div style="opacity: .75;">{{ _('Trang tự làm mới mỗi 15 giây, trừ khi bạn đang gõ.') }}</div>
+            <div class="war-phu">{{ _('Tin mới hiện ngay khi có, không phải tải lại trang.') }}</div>
         </div>
     </div>
 
@@ -47,11 +32,10 @@
 
     {# Khung chat. Nội dung nằm trong war-chat.html để máy chủ đẩy sự kiện xuống thì
        thay đúng khối này, khỏi tải lại cả trang. #}
-    <div id="war-chat" style="border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px;
-                              max-height: 62vh; overflow-y: auto; background: #fff;">
+    <div id="war-chat" style="padding: 8px 12px; max-height: 62vh; overflow-y: auto;">
         {% include "hcmus/war-chat.html" %}
     </div>
-    <div id="war-trangthai" style="font-size: .82em; opacity: .6; margin-top: 4px;"></div>
+    <div id="war-trangthai" class="war-phu" style="font-size: .82em; margin-top: 4px;"></div>
 
     <form method="post" style="margin-top: 10px;">
         {% csrf_token %}
