@@ -11,7 +11,7 @@
     <b>{% if m.kind == 'B' %}bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}:</b>
     {% if m.parent %}<span class="war-phu" style="font-size: .84em;">↳ {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
     {% if m.retracted %}
-        <i class="war-phu">{{ _('đã thu hồi') }}</i>
+        <i class="war-phu">{{ _('đã xoá') }}</i>
     {% else %}
         <span{% if m.noi_bat %} class="war-noibat"{% endif %}>{{ m.body }}</span>
         {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
@@ -19,31 +19,33 @@
     {% if m.done %}<span class="war-xongdau" style="font-size: .8em;">✓ {{ _('xong') }}</span>{% endif %}
 
     {% if not m.retracted %}
-    <span class="war-nut" style="white-space: nowrap; margin-left: 6px;">
-        {% for ma, nhan, gt in (
-                ('tra-loi', _('Trả lời'), 'tra_loi'),
-                ('noi-bat', m.noi_bat and _('Bỏ nổi bật') or _('Nổi bật'), ''),
-                ('xong',    m.done and _('Bỏ tích') or _('Tích xong'), ''),
-                ('sua',     _('Sửa'), 'sua'),
-                ('thu-hoi', _('Gỡ'), '')) %}
-            {% set cua_minh = m.author_id == request.profile.id %}
-            {% set duoc = (ma in ('noi-bat', 'xong', 'tra-loi'))
-                          or (ma == 'thu-hoi' and (cua_minh or request.user.is_superuser))
-                          or (ma == 'sua' and cua_minh and m.kind != 'B') %}
-            {% if duoc %}
-                {% if gt %}
-                    <a class="war-btn" href="?{% if contest %}contest={{ contest }}&amp;{% endif %}{% if chi_viec %}viec=1&amp;{% endif %}{{ gt }}={{ m.id }}">{{ nhan }}</a>
-                {% else %}
-                    <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}"
-                          style="display: inline-block; margin: 0; padding: 0;">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path() }}">
-                        <button type="submit" class="war-btn">{{ nhan }}</button>
-                    </form>
-                {% endif %}
+    {# Menu thả xuống thay cho dãy nút nằm dưới tin: dùng <details> nên không cần JS
+       để mở đóng, chỉ cần một đoạn nhỏ để đóng menu khác khi mở một menu mới. #}
+    <details class="war-menu">
+        <summary class="war-menu-nut" title="{{ _('Thao tác') }}">⋮</summary>
+        <div class="war-menu-noi">
+            <a class="war-mi" href="?{% if contest %}contest={{ contest }}&amp;{% endif %}{% if chi_viec %}viec=1&amp;{% endif %}tra_loi={{ m.id }}">{{ _('Trả lời') }}</a>
+            {% for ma, nhan in (('noi-bat', m.noi_bat and _('Bỏ nổi bật') or _('Nổi bật')),
+                                ('xong', m.done and _('Bỏ tích') or _('Tích đã xong'))) %}
+                <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                    <button type="submit" class="war-mi">{{ nhan }}</button>
+                </form>
+            {% endfor %}
+            {% if m.author_id == request.profile.id and m.kind != 'B' %}
+                <a class="war-mi" href="?{% if contest %}contest={{ contest }}&amp;{% endif %}{% if chi_viec %}viec=1&amp;{% endif %}sua={{ m.id }}">{{ _('Sửa') }}</a>
             {% endif %}
-        {% endfor %}
-    </span>
+            {% if m.author_id == request.profile.id or request.user.is_superuser %}
+                <form method="post" action="{{ url('hcmus_war_action', m.id, 'thu-hoi') }}"
+                      onsubmit="return confirm('{{ _('Xoá tin này?') }}');">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                    <button type="submit" class="war-mi war-mi-xoa">{{ _('Xoá') }}</button>
+                </form>
+            {% endif %}
+        </div>
+    </details>
     {% endif %}
 </div>
 {% endfor %}

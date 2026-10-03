@@ -238,26 +238,60 @@ ul.pagination > .disabled-page > {
 
 .war-xongdau { color: if($is_light_theme, #1e7e34, #6fcf8d); }
 
-.war-btn {
+// Menu thao tác của từng tin: nút ba chấm dọc, bấm mới mở.
+.war-menu {
     display: inline-block;
-    margin: 0 1px;
-    padding: 1px 8px;
-    font-size: .78em;
-    line-height: 1.7;
+    position: relative;
     vertical-align: middle;
-    cursor: pointer;
-    text-decoration: none;
-    border: 1px solid $color_primary25;
-    border-radius: 10px;
-    background-color: $color_primary5;
-    color: $color_link100;
 
-    &:hover, &:focus {
-        text-decoration: none;
+    summary.war-menu-nut {
+        list-style: none;
+        cursor: pointer;
+        padding: 0 6px;
+        border-radius: 4px;
+        color: $color_primary75;
+        user-select: none;
+
+        &::-webkit-details-marker { display: none; }
+        &:hover { background-color: $color_primary5; color: $color_primary100; }
+    }
+
+    &[open] summary.war-menu-nut {
         background-color: $color_brand;
-        border-color: $color_brand;
         color: #fff;
     }
+
+    .war-menu-noi {
+        position: absolute;
+        z-index: 30;
+        right: 0;
+        min-width: 150px;
+        padding: 4px 0;
+        border: 1px solid $color_primary25;
+        border-radius: $widget_border_radius;
+        background-color: $color_primary0;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
+
+        form { margin: 0; }
+    }
+
+    .war-mi {
+        display: block;
+        width: 100%;
+        padding: 5px 14px;
+        border: none;
+        background: none;
+        text-align: left;
+        font: inherit;
+        font-size: .9em;
+        color: $color_primary100;
+        cursor: pointer;
+        text-decoration: none;
+
+        &:hover { background-color: $color_brand; color: #fff; text-decoration: none; }
+    }
+
+    .war-mi-xoa { color: if($is_light_theme, #c0392b, #ff8a80); }
 }
 
 // Dải đếm việc chưa xong ở đầu phòng dã chiến.

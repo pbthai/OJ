@@ -85,6 +85,14 @@
 
     // Đẩy: máy chủ phát một sự kiện mỗi khi có tin mới hoặc tin đổi trạng thái, trang
     // chỉ nạp lại đúng khối tin. Ô soạn tin nằm ngoài khối nên chữ đang gõ không mất.
+    // Mở một menu thì đóng các menu khác, và bấm ra ngoài thì đóng hết.
+    document.addEventListener('click', function (e) {
+        var mo = e.target.closest ? e.target.closest('details.war-menu') : null;
+        document.querySelectorAll('details.war-menu[open]').forEach(function (d) {
+            if (d !== mo) d.removeAttribute('open');
+        });
+    });
+
     if (window.event_dispatcher) {
         window.event_dispatcher.on('war_room', function () { napLai(); });
         window.event_dispatcher.onwsclose(function () {
