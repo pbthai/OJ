@@ -106,11 +106,6 @@
             {% endfor %}
             <button type="submit" class="button">{{ _('Gửi yêu cầu in') }}</button>
         </form>
-        {% if ngon_ngu %}
-            <div style="font-size: .88em; opacity: .8; margin-top: 8px;">
-                {{ _('Tên ngôn ngữ dùng được:') }} {{ ngon_ngu|join(', ') }}
-            </div>
-        {% endif %}
     </details>
     {% endif %}
 {% endif %}

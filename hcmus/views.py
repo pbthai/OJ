@@ -997,6 +997,22 @@ def _xep_hang_in(profile, cp, code, language_name, pygments_name, problem_label,
         % {'p': pages}
 
 
+def _nhan_ban_in(profile, contest_id):
+    """Nhãn gợi ý cho bản in kế tiếp: <tên đội>-printNN.
+
+    NN đếm theo số bản in đội này đã gửi trong cùng phạm vi (một kỳ thi, hoặc ngoài
+    kỳ thi với nhân viên). Bản bị từ chối không tính, cho khớp với cách tính hạn mức.
+    Có số thứ tự thì giám thị xếp giấy theo đội dễ hơn hẳn, và thí sinh biết bản nào
+    là bản nào khi cầm nhiều tờ.
+    """
+    from hcmus.models import PrintRequest
+    da_co = (PrintRequest.objects
+             .filter(profile=profile, contest_id=contest_id)
+             .exclude(status=PrintRequest.REJECTED)
+             .count())
+    return '%s-print%02d' % (profile.display_name, da_co + 1)
+
+
 def _ky_thi_dang_du(profile):
     """Lượt dự kỳ thi đang diễn ra của thí sinh, hoặc None."""
     cp = profile.current_contest
@@ -1039,11 +1055,23 @@ def print_submission(request, submission):
 class PrintCodeForm(forms.Form):
     """Dán mã nguồn để in, dùng cho phần mã không nằm trong bài nộp nào."""
     problem = forms.CharField(label=_('Nhãn bản in'), max_length=100, required=False,
-                              help_text=_('Ví dụ tên bài, hoặc "nháp". Chỉ để giám thị '
-                                          'và bạn nhận ra bản in của mình.'))
-    language = forms.CharField(label=_('Ngôn ngữ'), max_length=40, required=False,
-                               help_text=_('Để tô màu cho dễ đọc. Bỏ trống cũng in được.'))
+                              help_text=_('Để giám thị và bạn nhận ra bản in giữa một '
+                                          'chồng giấy. Để nguyên cũng được.'))
+    language = forms.ChoiceField(label=_('Ngôn ngữ'), required=False,
+                                 help_text=_('Chỉ để tô màu cho dễ đọc, không ảnh hưởng '
+                                             'nội dung in.'))
     code = forms.CharField(label=_('Mã nguồn'), widget=forms.Textarea(attrs={'rows': 18}))
+
+    def __init__(self, *args, ten_ngon_ngu=(), nhan_mac_dinh='', **kwargs):
+        super().__init__(*args, **kwargs)
+        # Gõ tay tên ngôn ngữ thì rất dễ sai một ký tự rồi mất tô màu mà không biết
+        # vì sao, nên cho chọn trong danh sách lấy thẳng từ bảng Language.
+        self.fields['language'].choices = ([('', _('(không tô màu)'))]
+                                           + [(t, t) for t in ten_ngon_ngu])
+        mac_dinh = next((t for t in ten_ngon_ngu if t == 'C++20'), '')
+        self.fields['language'].initial = mac_dinh
+        if nhan_mac_dinh:
+            self.fields['problem'].initial = nhan_mac_dinh
 
     def clean_code(self):
         code = self.cleaned_data['code']
@@ -1086,19 +1114,20 @@ def print_page(request):
         ctx['nhan_vien_ngoai_ky_thi'] = True
 
     ngon_ngu = list(Language.objects.order_by('name').values_list('name', 'pygments'))
-    ctx['ngon_ngu'] = [n for n, _p in ngon_ngu]
+    ten_ngon_ngu = [n for n, _p in ngon_ngu]
+    nhan = _nhan_ban_in(profile, cp.contest_id if cp else None)
 
     if request.method == 'POST':
-        form = PrintCodeForm(request.POST)
+        form = PrintCodeForm(request.POST, ten_ngon_ngu=ten_ngon_ngu, nhan_mac_dinh=nhan)
         if form.is_valid():
             ten = form.cleaned_data['language'].strip()
             ok, msg = _xep_hang_in(profile, cp, form.cleaned_data['code'], ten,
                                    dict(ngon_ngu).get(ten, ''),
-                                   form.cleaned_data['problem'] or _('Mã dán tay'))
+                                   form.cleaned_data['problem'].strip() or nhan)
             return render(request, 'hcmus/print-result.html',
                           {'title': _('In bài'), 'ok': ok, 'message': msg, 'submission': None})
     else:
-        form = PrintCodeForm()
+        form = PrintCodeForm(ten_ngon_ngu=ten_ngon_ngu, nhan_mac_dinh=nhan)
     ctx['form'] = form
 
     if cp is None:
@@ -1188,7 +1217,8 @@ def war_room(request):
     if key:
         qs = qs.filter(contest__key=key)
     if chi_viec:
-        qs = qs.filter(done=False, kind=WarMessage.BOT)
+        # retracted=False phòng cho các tin thu hồi từ trước lúc có luật "thu hồi là xong".
+        qs = qs.filter(done=False, retracted=False, kind=WarMessage.BOT)
     items = list(qs[:200])
 
     cac_contest = list(Contest.objects.filter(war_messages__isnull=False)
@@ -1220,7 +1250,13 @@ def war_action(request, pk, hanh_dong):
             raise PermissionDenied()
         m.retracted = True
         m.retracted_by = profile
-        m.save(update_fields=['retracted', 'retracted_by'])
+        # Tin đã thu hồi thì không còn việc gì để làm với nó nữa, nên tính luôn là
+        # xong. Không làm vậy thì nó nằm mãi trong bộ lọc "chỉ việc chưa xong" và
+        # người trực thi cứ thấy một việc tồn mà mở ra thì trống.
+        m.done = True
+        m.done_by = profile
+        m.done_at = timezone.now()
+        m.save(update_fields=['retracted', 'retracted_by', 'done', 'done_by', 'done_at'])
     elif hanh_dong == 'xong':
         m.done = not m.done
         m.done_by = profile if m.done else None

@@ -2,17 +2,32 @@
 
 {% block js_media %}
     {# Tự làm mới để trực thi không phải bấm F5. Dừng làm mới khi đang gõ, nếu không
-       thì đang soạn tin sẽ bị mất chữ. #}
+       thì đang soạn tin sẽ bị mất chữ. Xem hàm dangBan() bên dưới. #}
     <script>
     (function () {
-        var dangGo = false;
-        document.addEventListener('DOMContentLoaded', function () {
-            var o = document.getElementById('war-body');
-            if (o) {
-                o.addEventListener('focus', function () { dangGo = true; });
-                o.addEventListener('blur', function () { dangGo = o.value.trim() !== ''; });
+        // Luật cũ chỉ canh ô soạn tin chính (#war-body), nên gõ vào ô trả lời hay ô
+        // lọc là vẫn bị tải lại giữa chừng và mất chữ. Nay chặn theo ba dấu hiệu, chỉ
+        // cần một dấu hiệu đúng là hoãn: con trỏ đang ở trong một ô nhập bất kỳ, vừa
+        // gõ trong 30 giây qua, hoặc còn chữ dở trong một ô nào đó.
+        var CHU_KY = 15000, IM_LANG = 30000;
+        var lanGoCuoi = 0;
+        document.addEventListener('input', function () { lanGoCuoi = Date.now(); }, true);
+        document.addEventListener('compositionstart', function () { lanGoCuoi = Date.now(); }, true);
+
+        function dangBan() {
+            var el = document.activeElement;
+            if (el && /^(TEXTAREA|INPUT|SELECT)$/.test(el.tagName)
+                && el.type !== 'submit' && el.type !== 'button') return true;
+            if (lanGoCuoi && Date.now() - lanGoCuoi < IM_LANG) return true;
+            var o = document.querySelectorAll('textarea, input[type="text"], input:not([type])');
+            for (var i = 0; i < o.length; i++) {
+                if ((o[i].value || '').trim() !== '') return true;
             }
-            setInterval(function () { if (!dangGo) location.reload(); }, 15000);
+            return false;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            setInterval(function () { if (!dangBan()) location.reload(); }, CHU_KY);
         });
     })();
     </script>
