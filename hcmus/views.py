@@ -1204,9 +1204,9 @@ def _co_quyen_truc_thi(user):
 def war_room(request):
     """Phòng dã chiến: chat của trực thi cộng bảng tin của bot, chung một dòng thời gian.
 
-    Tin mới nhất lên ĐẦU chứ không phải cuối như chat thường. Lý do: trang tự làm
-    mới trong giờ thi, mà nếu mới nhất nằm cuối thì mỗi lần làm mới lại phải cuộn
-    xuống, trực thi đang cầm xấp giấy không làm được việc đó.
+    Hiển thị như một khung chat phẳng, cũ ở trên mới ở dưới. Trang tự làm mới trong
+    giờ thi nên có một đoạn JS cuộn xuống đáy sau mỗi lần nạp; đổi lại, người đọc
+    không phải đảo ngược thứ tự trong đầu khi theo dõi một cuộc trao đổi.
     """
     from hcmus.models import WarMessage
     from judge.models import Contest
@@ -1232,25 +1232,37 @@ def war_room(request):
                                       kind=WarMessage.CHAT, body=noi_dung[:2000])
         return HttpResponseRedirect(request.get_full_path())
 
-    qs = (WarMessage.objects.filter(parent=None)
-          .select_related('author__user', 'done_by__user', 'contest')
-          .prefetch_related('replies__author__user'))
+    # Một dòng chat phẳng, không tách thành khối theo luồng trả lời: trực thi cần đọc
+    # lướt theo thời gian chứ không cần cây hội thoại. Trả lời vẫn giữ, nhưng hiện ngay
+    # trong dòng bằng một dấu nhắc nhỏ tới tin được trả lời.
+    qs = (WarMessage.objects
+          .select_related('author__user', 'done_by__user', 'contest', 'parent__author__user'))
     if key:
         qs = qs.filter(contest__key=key)
     if chi_viec:
         # retracted=False phòng cho các tin thu hồi từ trước lúc có luật "thu hồi là xong".
         qs = qs.filter(done=False, retracted=False, kind=WarMessage.BOT)
-    items = list(qs[:200])
+    # Lấy 200 tin gần nhất rồi đảo lại: cũ ở trên, mới ở dưới, giống mọi khung chat.
+    items = list(qs.order_by('-created')[:200])[::-1]
 
     cac_contest = list(Contest.objects.filter(war_messages__isnull=False)
                        .values_list('key', flat=True).distinct())
+    # Tin đang được trả lời, để ô soạn hiện rõ mình đang trả lời ai.
+    tra_loi_id = (request.GET.get('tra_loi') or '').strip()
+    tra_loi = (WarMessage.objects.select_related('author__user')
+               .filter(pk=int(tra_loi_id)).first()) if tra_loi_id.isdigit() else None
+
     return render(request, 'hcmus/war-room.html', {
         'title': _('Phòng dã chiến'),
         'items': items,
+        'tra_loi': tra_loi,
         'cac_contest': cac_contest,
         'contest': key,
         'chi_viec': chi_viec,
-        'con_viec': WarMessage.objects.filter(done=False, kind=WarMessage.BOT).count(),
+        # Loại tin thu hồi cho khớp bộ lọc 'chỉ việc chưa xong', nếu không thì con số
+        # trên đầu trang và danh sách bên dưới nói hai điều khác nhau.
+        'con_viec': WarMessage.objects.filter(done=False, retracted=False,
+                                              kind=WarMessage.BOT).count(),
     })
 
 

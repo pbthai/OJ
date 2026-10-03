@@ -53,14 +53,7 @@
         </div>
     </div>
 
-    <form method="post" style="margin-bottom: 14px;">
-        {% csrf_token %}
-        <textarea name="body" id="war-body" rows="2" style="width: 100%;"
-                  placeholder="{{ _('Nhắn cho trực thi...') }}"></textarea>
-        <button type="submit" class="button" style="margin-top: 6px;">{{ _('Gửi') }}</button>
-    </form>
-
-    <form method="get" style="margin-bottom: 12px; display: flex; gap: 10px; align-items: flex-end;">
+    <form method="get" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: flex-end;">
         <div>
             <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Kỳ thi') }}</label>
             <select name="contest">
@@ -77,79 +70,70 @@
         <button type="submit" class="button">{{ _('Lọc') }}</button>
     </form>
 
-    {% for m in items %}
-    <div style="border: 1px solid {% if m.noi_bat %}#e0b050{% else %}#e2e2e2{% endif %};
-                {% if m.noi_bat %}box-shadow: 0 0 0 2px #fdf1d6;{% endif %} border-left: 4px solid
-                {% if m.kind == 'B' %}{% if m.done %}#2e9e4f{% else %}#e0900a{% endif %}{% else %}#c8c8c8{% endif %};
-                border-radius: 6px; padding: 9px 13px; margin-bottom: 8px;
-                background: {% if m.done %}#f6fbf7{% else %}#fff{% endif %};">
-        <div style="display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;">
-            <b>{% if m.kind == 'B' %}🤖 bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}</b>
-            <span style="font-size: .84em; opacity: .7;">{{ m.created|date("H:i:s d/m") }}</span>
-            {% if m.contest %}<span style="font-size: .8em; opacity: .65;">{{ m.contest.key }}</span>{% endif %}
-            {% if m.event %}<span style="font-size: .78em; background: #eef2f7; padding: 1px 7px;
-                                          border-radius: 9px;">{{ m.event }}</span>{% endif %}
-            {% if m.done %}<span style="font-size: .8em; color: #2e9e4f;">
-                ✓ {{ _('xong') }}{% if m.done_by %} — {{ m.done_by }}{% endif %}</span>{% endif %}
-            {% if m.noi_bat %}<span style="font-size: .8em; color: #b36b00;">★ {{ _('nổi bật') }}</span>{% endif %}
-        </div>
-
-        <div style="margin: 5px 0 6px;">
+    {# Khung chat: cũ ở trên, mới ở dưới, cuộn xuống đáy khi mở trang. #}
+    <div id="war-chat" style="border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px;
+                              max-height: 62vh; overflow-y: auto; background: #fff;">
+        {% if not items %}
+            <div style="opacity: .6; padding: 12px 0;">{{ _('Chưa có tin nào.') }}</div>
+        {% endif %}
+        {% for m in items %}
+        <div style="padding: 3px 0; line-height: 1.45;{% if m.done %}opacity: .55;{% endif %}">
+            <span style="font-size: .82em; opacity: .55;">{{ m.created|date("H:i") }}</span>
+            <b>{% if m.kind == 'B' %}bot{% else %}{{ m.author or _('(đã xoá)') }}{% endif %}:</b>
+            {% if m.parent %}<span style="font-size: .84em; opacity: .6;">↳
+                {{ m.parent.author or _('(đã xoá)') }}</span>{% endif %}
             {% if m.retracted %}
-                <i style="opacity: .6;">{{ _('Tin đã được thu hồi.') }}</i>
+                <i style="opacity: .55;">{{ _('đã thu hồi') }}</i>
             {% else %}
-                {{ m.body }}
-                {% if m.url %} <a href="{{ m.url }}">{{ _('mở') }}</a>{% endif %}
+                <span {% if m.noi_bat %}style="font-weight: 700; color: #c0392b;"{% endif %}>{{ m.body }}</span>
+                {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
+            {% endif %}
+            {% if m.done %}<span style="font-size: .8em; color: #2e9e4f;">✓</span>{% endif %}
+            {% if not m.retracted %}
+                <span style="font-size: .78em; opacity: .55; white-space: nowrap;">
+                {% for ma, nhan in (('noi-bat', m.noi_bat and _('bỏ đậm') or _('làm đậm')), ('xong', m.done and _('bỏ tích') or _('xong')), ('thu-hoi', _('thu hồi'))) %}
+                    {% if ma != 'thu-hoi' or m.author_id == request.profile.id or request.user.is_superuser %}
+                    <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}" style="display: inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path() }}">
+                        <button type="submit" style="background: none; border: none; padding: 0 2px;
+                                cursor: pointer; color: inherit; font: inherit; text-decoration: underline;">{{ nhan }}</button>
+                    </form>
+                    {% endif %}
+                {% endfor %}
+                <form method="get" style="display: inline;">
+                    {% if contest %}<input type="hidden" name="contest" value="{{ contest }}">{% endif %}
+                    {% if chi_viec %}<input type="hidden" name="viec" value="1">{% endif %}
+                    <input type="hidden" name="tra_loi" value="{{ m.id }}">
+                    <button type="submit" style="background: none; border: none; padding: 0 2px;
+                            cursor: pointer; color: inherit; font: inherit; text-decoration: underline;">{{ _('trả lời') }}</button>
+                </form>
+                </span>
             {% endif %}
         </div>
-
-        {% if not m.retracted %}
-        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-            {% for ma, nhan in (('noi-bat', m.noi_bat and _('bỏ nổi bật') or _('nổi bật')), ('xong', m.done and _('bỏ tích') or _('tích xong')), ('thu-hoi', _('thu hồi'))) %}
-                {% if ma != 'thu-hoi' or m.author_id == request.profile.id or request.user.is_superuser %}
-                <form method="post" action="{{ url('hcmus_war_action', m.id, ma) }}" style="display: inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
-                    <button type="submit" class="button" style="padding: 1px 9px; font-size: .85em;">{{ nhan }}</button>
-                </form>
-                {% endif %}
-            {% endfor %}
-            <a href="#" class="button" style="padding: 1px 9px; font-size: .85em;"
-               onclick="var f=document.getElementById('tl{{ m.id }}'); f.hidden=!f.hidden; if(!f.hidden) f.querySelector('textarea').focus(); return false;">
-                {{ _('trả lời') }}</a>
-        </div>
-        {% endif %}
-
-        {% for r in m.replies.all() %}
-            <div style="margin: 7px 0 0 22px; padding: 6px 10px; border-left: 3px solid #dcdcdc;
-                        background: #fafafa; border-radius: 4px;">
-                <div style="font-size: .84em; opacity: .75;">
-                    <b>{{ r.author or _('(đã xoá)') }}</b> · {{ r.created|date("H:i:s") }}
-                </div>
-                <div>{% if r.retracted %}<i style="opacity:.6;">{{ _('Tin đã được thu hồi.') }}</i>
-                     {% else %}{{ r.body }}{% endif %}</div>
-                {% if not r.retracted and (r.author_id == request.profile.id or request.user.is_superuser) %}
-                <form method="post" action="{{ url('hcmus_war_action', r.id, 'thu-hoi') }}" style="display:inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path() }}">
-                    <button type="submit" class="button"
-                            style="padding: 0 7px; font-size: .8em;">{{ _('thu hồi') }}</button>
-                </form>
-                {% endif %}
-            </div>
         {% endfor %}
-
-        <form method="post" id="tl{{ m.id }}" hidden style="margin: 8px 0 0 22px;">
-            {% csrf_token %}
-            <input type="hidden" name="parent" value="{{ m.id }}">
-            <textarea name="body" rows="2" style="width: 100%;"
-                      placeholder="{{ _('Trả lời...') }}"></textarea>
-            <button type="submit" class="button" style="margin-top: 4px; padding: 1px 10px;
-                    font-size: .85em;">{{ _('Gửi trả lời') }}</button>
-        </form>
     </div>
-    {% else %}
-        <p style="opacity: .75;">{{ _('Chưa có tin nào.') }}</p>
-    {% endfor %}
+
+    {# Ô soạn tin đặt dưới khung chat, đúng chỗ tay đang ở khi đọc tin mới nhất. #}
+    <form method="post" style="margin-top: 10px;">
+        {% csrf_token %}
+        {% if tra_loi %}
+            <div style="font-size: .86em; margin-bottom: 4px;">
+                {{ _('Đang trả lời') }} <b>{{ tra_loi.author or _('(đã xoá)') }}</b>:
+                <i>{{ tra_loi.body|truncate(80) }}</i>
+                <a href="?{% if contest %}contest={{ contest }}&{% endif %}{% if chi_viec %}viec=1{% endif %}">{{ _('bỏ') }}</a>
+            </div>
+            <input type="hidden" name="parent" value="{{ tra_loi.id }}">
+        {% endif %}
+        <textarea name="body" id="war-body" rows="2" style="width: 100%;"
+                  placeholder="{{ _('Nhắn cho trực thi...') }}"></textarea>
+        <button type="submit" class="button" style="margin-top: 6px;">{{ _('Gửi') }}</button>
+    </form>
 </div>
+<script>
+    (function () {
+        var o = document.getElementById('war-chat');
+        if (o) { o.scrollTop = o.scrollHeight; }
+    })();
+</script>
 {% endblock %}
