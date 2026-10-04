@@ -371,7 +371,10 @@ ul.pagination > .disabled-page > {
     line-height: 1.5;
     border-radius: 4px;
     // Cùng lý do với .war-mi: style.css có `button { color: white !important }`.
-    color: $color_primary50 !important;
+    // primary50 (#808080) chỉ đạt 3,95:1 trên nền trắng, dưới ngưỡng cho chữ nhỏ, mà
+    // trái tim này lại nhỏ. Theme sáng dùng tông đậm hơn; theme tối thì #808080 trên
+    // nền #0f0f0f đã thừa tương phản.
+    color: if($is_light_theme, $color_primary66, $color_primary50) !important;
 
     &:hover { background-color: $color_primary5; color: $color_primary75 !important; }
 }

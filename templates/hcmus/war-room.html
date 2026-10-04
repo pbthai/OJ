@@ -194,8 +194,18 @@
     // Phím điều hướng khi hộp đang mở thì thuộc về hộp, không được coi là "con trỏ
     // vừa đi chỗ khác" mà tính lại gợi ý, vì tính lại sẽ reset ô đang chọn về đầu.
     var PHIM_HOP = ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'];
+    // Khoá sau khi vừa đóng hộp có chủ ý (Escape) hoặc vừa nhận một tên. Thiếu nó thì
+    // keyup ngay sau đó gọi lại veGoiY và hộp bật lên y như cũ: Escape thành vô dụng,
+    // còn chèn tên vào GIỮA câu (chỗ đã sẵn dấu cách phía sau) thì chữ trước con trỏ
+    // vẫn kết thúc đúng ở @tên nên hộp mở lại, nuốt luôn phím Enter. Mở lại chỉ khi
+    // người dùng gõ thêm, tức là ở sự kiện input.
+    var khoaMo = false;
 
-    function dongGoiY() { hop.hidden = true; dang = []; }
+    function dongGoiY(khoa) {
+        hop.hidden = true;
+        dang = [];
+        if (khoa) khoaMo = true;
+    }
 
     function tuDangGo() {
         // Chỉ nhận @... đứng ngay trước con trỏ, và phải có khoảng trắng hoặc đầu
@@ -212,10 +222,12 @@
     function datChoHop() {
         // Ô soạn tin nằm cuối trang nên thả xuống dưới thường tràn khỏi màn hình.
         // Dưới không đủ chỗ thì lật lên trên, giống menu thao tác của từng tin.
+        // Mặc định LẬT LÊN, chỉ thả xuống khi trên không đủ chỗ. Ô soạn tin nằm sát
+        // đáy trang và nút Gửi nằm ngay dưới nó, nên thả xuống là hộp phủ đúng lên
+        // nút Gửi: cú bấm đầu tiên rơi vào một mục gợi ý chứ không gửi tin.
         var r = o.getBoundingClientRect();
         var cao = hop.offsetHeight || 220;
-        var duoi = window.innerHeight - r.bottom;
-        if (duoi < cao + 12 && r.top > cao + 12) {
+        if (r.top > cao + 12) {
             hop.style.top = 'auto';
             hop.style.bottom = '100%';
         } else {
@@ -235,6 +247,7 @@
     }
 
     function veGoiY() {
+        if (khoaMo) { hop.hidden = true; dang = []; return; }
         var t = tuDangGo();
         if (t === null) { dongGoiY(); return; }
         var loc = TEN.filter(function (x) { return x.toLowerCase().indexOf(t.toLowerCase()) === 0; });
@@ -260,7 +273,7 @@
         var truoc = o.value.slice(0, vt);
         var sau = o.value.slice(vt);
         var m = /@([A-Za-z0-9_.-]*)$/.exec(truoc);
-        if (!m) { dongGoiY(); return; }
+        if (!m) { dongGoiY(true); return; }
         // Đã có khoảng trắng ngay sau con trỏ thì đừng chèn thêm cái nữa.
         var them = /^\s/.test(sau) ? '' : ' ';
         var moiChu = '@' + x + them;
@@ -275,12 +288,12 @@
             var p = vt - m[0].length + moiChu.length;
             o.setSelectionRange(p, p);
         }
-        dongGoiY();
+        dongGoiY(true);
         o.focus();
     }
 
     if (o && hop) {
-        o.addEventListener('input', veGoiY);
+        o.addEventListener('input', function () { khoaMo = false; veGoiY(); });
         o.addEventListener('blur', function () { setTimeout(dongGoiY, 120); });
         // Con trỏ đi chỗ khác bằng Home, End, mũi tên trái phải, hay bằng chuột thì
         // KHÔNG phát sự kiện input. Không tính lại ở đây thì hộp treo lại, và cú Enter
@@ -303,7 +316,7 @@
                 chonTen(dang[chon]);
             } else if (e.key === 'Escape') {
                 e.preventDefault();
-                dongGoiY();
+                dongGoiY(true);
             }
         });
         window.addEventListener('resize', function () { if (!hop.hidden) datChoHop(); });
