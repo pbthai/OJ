@@ -589,6 +589,34 @@ class WarMessage(models.Model):
         return '%s: %s' % (self.author or 'bot', self.body[:40])
 
 
+class WarTim(models.Model):
+    """Một người thả tim một tin trong phòng dã chiến.
+
+    Mục đích không phải là bày tỏ cảm xúc mà là ĐẾM SỐ NGƯỜI ĐÃ ĐỌC. Trong giờ thi,
+    người trực thi đăng một việc rồi muốn biết đã có mấy người trong ca thấy nó, mà
+    bắt mỗi người trả lời "đã đọc" thì làm rối dòng chat. Một cú bấm vào trái tim nhẹ
+    hơn hẳn, và con số hiện ngay cạnh tin.
+
+    Một người chỉ tính một lần cho mỗi tin, nên có ràng buộc duy nhất ở tầng CSDL
+    chứ không chỉ kiểm trong view: hai tab mở cùng lúc bấm gần như đồng thời thì chỉ
+    kiểm ở view là lọt.
+    """
+    message = models.ForeignKey(WarMessage, on_delete=models.CASCADE,
+                                related_name='tims', verbose_name=_('message'))
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE,
+                                related_name='war_tims', verbose_name=_('who'))
+    created = models.DateTimeField(auto_now_add=True, verbose_name=_('created'))
+
+    class Meta:
+        verbose_name = _('war room heart')
+        verbose_name_plural = _('war room hearts')
+        unique_together = ('message', 'profile')
+        ordering = ['created']
+
+    def __str__(self):
+        return '%s ♥ #%s' % (self.profile, self.message_id)
+
+
 class PermSet(models.Model):
     """Tập quyền, lồng nhau được — đại số tập hợp cho phân quyền.
 
@@ -1127,6 +1155,15 @@ def _day_su_kien_phong():
 @receiver(post_save, sender='hcmus.WarMessage')
 def _bao_phong_da_chien(sender, instance, **kwargs):
     _day_su_kien_phong()
+
+
+# CỐ Ý KHÔNG đẩy sự kiện khi có người thả tim.
+#
+# Mỗi sự kiện làm MỌI trình duyệt đang mở phòng tải lại cả khối 200 tin. Một thông báo
+# chung được cả ca 15 người thả tim là 15 lần cả phòng nạp lại, chỉ để một con số nhích
+# lên. Người vừa bấm thấy ngay vì trang tự sửa số tại chỗ; người khác thấy ở nhịp hỏi
+# lại 30 giây hoặc khi có tin mới. Trễ vài chục giây với một biên nhận đã đọc là chấp
+# nhận được, còn khuếch đại tải giữa giờ thi thì không.
 
 
 def bot_noi(contest, event, body, url=''):

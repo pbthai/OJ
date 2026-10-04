@@ -54,8 +54,11 @@
             </div>
             <input type="hidden" name="sua" value="{{ sua.id }}">
         {% endif %}
-        <textarea name="body" id="war-body" rows="2" style="width: 100%;"
-                  placeholder="{{ _('Nhắn cho trực thi...') }}">{% if sua %}{{ sua.body }}{% endif %}</textarea>
+        <div style="position: relative;">
+            <textarea name="body" id="war-body" rows="2" style="width: 100%;"
+                      placeholder="{{ _('Nhắn cho trực thi... gõ @ để nhắc tên ai đó') }}">{% if sua %}{{ sua.body }}{% endif %}</textarea>
+            <div id="war-goiy" class="war-goiy" hidden></div>
+        </div>
         <button type="submit" class="button" style="margin-top: 6px;">{% if sua %}{{ _('Lưu') }}{% else %}{{ _('Gửi') }}{% endif %}</button>
     </form>
 </div>
@@ -149,6 +152,162 @@
             napBuNeuCan();
         }, true);
     });
+
+    // ---- thả tim ------------------------------------------------------------
+    // Gửi bằng fetch chứ không để form nạp lại cả trang. Cả trang này được dựng quanh
+    // một luật: không bao giờ làm mất chữ người trực thi đang gõ. Một cú bấm tim mà
+    // nạp lại trang thì mất chữ đang gõ, mất ngữ cảnh đang trả lời ai, và nhảy xuống
+    // đáy khung chat. Form vẫn giữ nguyên để trình duyệt không có JS còn dùng được.
+    document.addEventListener('submit', function (e) {
+        var f = e.target.closest ? e.target.closest('form[data-tim]') : null;
+        if (!f) return;
+        e.preventDefault();
+        var nut = f.querySelector('.war-tim');
+        if (!nut || nut.disabled) return;
+        // Khoá nút trong lúc chờ: bấm đúp lúc máy chủ chậm thì hai lượt toggle triệt
+        // tiêu nhau, người bấm tưởng đã thả mà thật ra không có tim nào.
+        nut.disabled = true;
+        fetch(f.action, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            body: new FormData(f),
+        }).then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+              if (!d) return;
+              var so = nut.querySelector('.war-tim-so');
+              if (so) so.textContent = d.so ? ' ' + d.so : '';
+              nut.classList.toggle('war-tim-roi', !!d.cua_toi);
+          })
+          .catch(function () {})
+          .then(function () { nut.disabled = false; });
+    });
+
+    // ---- gợi ý @tên ----------------------------------------------------------
+    // Danh sách chỉ gồm người trực thi, không gồm 170 đội: gợi ý mà ra 170 dòng thì
+    // nhanh hơn là tự gõ.
+    var TEN = {{ ten_truc_thi | tojson }};
+    var o = document.getElementById('war-body');
+    var hop = document.getElementById('war-goiy');
+    var dang = [];
+    var chon = 0;
+    // Phím điều hướng khi hộp đang mở thì thuộc về hộp, không được coi là "con trỏ
+    // vừa đi chỗ khác" mà tính lại gợi ý, vì tính lại sẽ reset ô đang chọn về đầu.
+    var PHIM_HOP = ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'];
+
+    function dongGoiY() { hop.hidden = true; dang = []; }
+
+    function tuDangGo() {
+        // Chỉ nhận @... đứng ngay trước con trỏ, và phải có khoảng trắng hoặc đầu
+        // dòng ở trước dấu @, nếu không thì địa chỉ thư cũng bật gợi ý.
+        //
+        // Đòi ÍT NHẤT một ký tự sau @. Cho phép @ trần thì gõ một dấu @ rồi bấm Tab
+        // để sang nút Gửi sẽ bị hộp nuốt mất phím và chèn đại một cái tên. Một dấu @
+        // trần cũng chẳng lọc được gì, mở cả danh sách ra không giúp ai.
+        var truoc = o.value.slice(0, o.selectionStart);
+        var m = /(^|\s)@([A-Za-z0-9_.-]+)$/.exec(truoc);
+        return m ? m[2] : null;
+    }
+
+    function datChoHop() {
+        // Ô soạn tin nằm cuối trang nên thả xuống dưới thường tràn khỏi màn hình.
+        // Dưới không đủ chỗ thì lật lên trên, giống menu thao tác của từng tin.
+        var r = o.getBoundingClientRect();
+        var cao = hop.offsetHeight || 220;
+        var duoi = window.innerHeight - r.bottom;
+        if (duoi < cao + 12 && r.top > cao + 12) {
+            hop.style.top = 'auto';
+            hop.style.bottom = '100%';
+        } else {
+            hop.style.top = '100%';
+            hop.style.bottom = 'auto';
+        }
+    }
+
+    function toSang() {
+        Array.prototype.forEach.call(hop.children, function (d, i) {
+            var la = (i === chon);
+            d.classList.toggle('war-goiy-chon', la);
+            // Không cuộn thì từ mục thứ bảy trở đi là bấm mù: hộp cao tối đa 220px,
+            // tám mục thì tràn.
+            if (la && d.scrollIntoView) d.scrollIntoView({block: 'nearest'});
+        });
+    }
+
+    function veGoiY() {
+        var t = tuDangGo();
+        if (t === null) { dongGoiY(); return; }
+        var loc = TEN.filter(function (x) { return x.toLowerCase().indexOf(t.toLowerCase()) === 0; });
+        if (!loc.length) { dongGoiY(); return; }
+        dang = loc.slice(0, 8);
+        chon = 0;
+        hop.innerHTML = '';
+        dang.forEach(function (x) {
+            var d = document.createElement('div');
+            d.className = 'war-goiy-muc';
+            d.textContent = x;
+            // mousedown chứ không click: click xảy ra sau blur, lúc đó hộp đã đóng.
+            d.addEventListener('mousedown', function (e) { e.preventDefault(); chonTen(x); });
+            hop.appendChild(d);
+        });
+        hop.hidden = false;
+        toSang();
+        datChoHop();
+    }
+
+    function chonTen(x) {
+        var vt = o.selectionStart;
+        var truoc = o.value.slice(0, vt);
+        var sau = o.value.slice(vt);
+        var m = /@([A-Za-z0-9_.-]*)$/.exec(truoc);
+        if (!m) { dongGoiY(); return; }
+        // Đã có khoảng trắng ngay sau con trỏ thì đừng chèn thêm cái nữa.
+        var them = /^\s/.test(sau) ? '' : ' ';
+        var moiChu = '@' + x + them;
+        o.setSelectionRange(vt - m[0].length, vt);
+        // insertText giữ được ngăn xếp undo của ô soạn; gán thẳng .value thì Ctrl+Z
+        // mất sạch, kể cả phần chữ gõ từ trước. Trình duyệt nào không có thì lùi về
+        // cách gán, thà mất undo còn hơn không chèn được.
+        var xong = false;
+        try { xong = document.execCommand('insertText', false, moiChu); } catch (e) { xong = false; }
+        if (!xong) {
+            o.value = truoc.slice(0, vt - m[0].length) + moiChu + sau;
+            var p = vt - m[0].length + moiChu.length;
+            o.setSelectionRange(p, p);
+        }
+        dongGoiY();
+        o.focus();
+    }
+
+    if (o && hop) {
+        o.addEventListener('input', veGoiY);
+        o.addEventListener('blur', function () { setTimeout(dongGoiY, 120); });
+        // Con trỏ đi chỗ khác bằng Home, End, mũi tên trái phải, hay bằng chuột thì
+        // KHÔNG phát sự kiện input. Không tính lại ở đây thì hộp treo lại, và cú Enter
+        // tiếp theo bị nuốt rồi chèn một cái tên vào đúng chỗ con trỏ vừa dời tới.
+        o.addEventListener('keyup', function (e) {
+            if (!hop.hidden && PHIM_HOP.indexOf(e.key) >= 0) return;
+            veGoiY();
+        });
+        o.addEventListener('click', veGoiY);
+        o.addEventListener('select', veGoiY);
+        o.addEventListener('keydown', function (e) {
+            if (hop.hidden || !dang.length) return;
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                chon = (chon + (e.key === 'ArrowDown' ? 1 : dang.length - 1)) % dang.length;
+                toSang();
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                // Chỉ nuốt phím khi hộp đang mở, không thì mất luôn phím xuống dòng.
+                e.preventDefault();
+                chonTen(dang[chon]);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                dongGoiY();
+            }
+        });
+        window.addEventListener('resize', function () { if (!hop.hidden) datChoHop(); });
+    }
 
     if (window.event_dispatcher) {
         window.event_dispatcher.on('war_room', function () { napLai(); });

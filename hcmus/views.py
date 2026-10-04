@@ -1219,6 +1219,99 @@ def _war_danh_sach(key, chi_viec):
     return list(qs.order_by('-created')[:200])[::-1]
 
 
+def _nguoi_truc_thi():
+    """Những username có thể bị tag trong phòng dã chiến.
+
+    Lấy đúng người có quyền vào phòng, gồm cả quyền cấp thẳng cho user, cấp qua nhóm,
+    và superuser. Không lấy cả site: gợi ý tên 170 đội thì danh sách thành vô dụng.
+    """
+    from django.contrib.auth.models import User
+    # is_active=True là bắt buộc: cổng vào phòng là has_perm, mà ModelBackend trả
+    # False cho tài khoản đã khoá. Không lọc thì gợi ý ra tên người không vào được
+    # phòng, tag họ xong ngồi chờ một người không bao giờ đọc.
+    # .distinct() vì hai nhánh OR đi qua hai quan hệ nhiều-nhiều, mỗi user nở ra
+    # nhiều dòng; set() ở ngoài vẫn đúng kết quả nhưng để CSDL làm việc thừa.
+    q = (Q(user_permissions__codename='use_war_room') |
+         Q(groups__permissions__codename='use_war_room') |
+         Q(is_superuser=True))
+    return sorted(set(User.objects.filter(q, is_active=True)
+                      .values_list('username', flat=True).distinct()))
+
+
+def _to_mau_tag(body, ten_hop_le, toi=None):
+    """Đổi @username thành HTML đã tô, trả về chuỗi an toàn để nhúng thẳng.
+
+    Thoát HTML TRƯỚC rồi mới chèn thẻ, không bao giờ ngược lại: nội dung do người
+    dùng gõ, làm ngược là mở cửa cho chèn mã.
+
+    Chỉ tô những tên có thật trong danh sách. Tô bừa mọi chuỗi sau @ thì địa chỉ thư
+    và cú pháp mảng cũng sáng lên, nhìn một lúc là mắt bỏ qua hết, mà đúng lúc cần
+    thấy thì không thấy.
+    """
+    from django.utils.html import escape
+    from django.utils.safestring import mark_safe
+
+    an_toan = escape(body)
+    if not ten_hop_le:
+        return mark_safe(an_toan)
+    # Tên dài trước, để @abc không ăn mất phần đầu của @abcdef.
+    mau = _mau_nhac(ten_hop_le)
+    if mau is None:
+        return mark_safe(an_toan)
+
+    def thay(m):
+        ten = m.group(1)
+        lop = 'war-tag war-tag-toi' if toi and ten == toi else 'war-tag'
+        return '<span class="%s">@%s</span>' % (lop, ten)
+
+    return mark_safe(mau.sub(thay, an_toan))
+
+
+def _mau_nhac(ten_hop_le):
+    """Biểu thức nhận @tên. Dựng một lần, dùng cho CẢ tô màu lẫn cờ "có người gọi tôi".
+
+    Trước đây cờ đó dùng phép tìm chuỗi con `('@' + toi) in body`, lệch hẳn với luật tô
+    màu. Hai chỗ lệch nhau thì sinh ra đúng hai kiểu sai mà lookbehind và \b ở đây đã
+    chặn: tin nhắc @thaily làm sáng vạch của người tên thai, và địa chỉ thư a@thai.com
+    cũng tính là gọi tên. Giờ một luật, hai nơi dùng chung.
+    """
+    if not ten_hop_le:
+        return None
+    # (?<!...) để @ phải đứng đầu từ. Tên dài xếp trước, để @abc không ăn mất phần đầu
+    # của @abcdef.
+    return re.compile(r'(?<![A-Za-z0-9_.@-])@(' +
+                      '|'.join(re.escape(t) for t in
+                               sorted(ten_hop_le, key=len, reverse=True)) + r')\b')
+
+
+def _gan_them_cho_tin(items, request, ten_hop_le):
+    """Gắn vào mỗi tin: thân tin đã tô tag, số tim, mình đã thả tim chưa.
+
+    Đếm tim bằng MỘT truy vấn gộp cho cả trang chứ không hỏi từng tin: 200 tin là 200
+    truy vấn, mà khối này còn được dựng lại mỗi lần có người nhắn.
+    """
+    from django.db.models import Count
+    from hcmus.models import WarTim
+
+    toi = request.user.username if request.user.is_authenticated else None
+    mau_toi = _mau_nhac([toi]) if toi else None
+    ids = [m.id for m in items]
+    dem = dict(WarTim.objects.filter(message_id__in=ids).values_list('message_id')
+               .annotate(n=Count('id')))
+    cua_toi = set()
+    if request.user.is_authenticated:
+        cua_toi = set(WarTim.objects.filter(message_id__in=ids, profile=request.profile)
+                      .values_list('message_id', flat=True))
+    for m in items:
+        m.than_html = _to_mau_tag(m.body, ten_hop_le, toi)
+        m.so_tim = dem.get(m.id, 0)
+        m.toi_da_tim = m.id in cua_toi
+        # Tin đã thu hồi thì nội dung bị thay bằng chữ "đã xoá", làm nổi bật một
+        # dòng trống không giúp gì, chỉ gây chú ý nhầm.
+        m.tag_toi = bool(mau_toi) and not m.retracted and bool(mau_toi.search(m.body))
+    return items
+
+
 def _duong_ve_phong(key, chi_viec):
     """Đường quay về phòng dã chiến, giữ nguyên bộ lọc đang xem.
 
@@ -1244,8 +1337,9 @@ def war_feed(request):
     """
     key = (request.GET.get('contest') or '').strip()
     chi_viec = request.GET.get('viec') == '1'
+    ten = _nguoi_truc_thi()
     return render(request, 'hcmus/war-chat.html', {
-        'items': _war_danh_sach(key, chi_viec),
+        'items': _gan_them_cho_tin(_war_danh_sach(key, chi_viec), request, ten),
         'contest': key,
         'chi_viec': chi_viec,
         'duong_ve': _duong_ve_phong(key, chi_viec),
@@ -1290,15 +1384,23 @@ def war_room(request):
                 if cu_tin is not None:
                     cu_tin.body = noi_dung[:2000]
                     cu_tin.save(update_fields=['body'])
+                    # Tim ở đây là biên nhận ĐÃ ĐỌC. Sửa xong mà giữ nguyên số tim thì
+                    # con số khẳng định một điều sai: mọi người đã đọc đoạn chữ mới,
+                    # trong khi họ chỉ đọc đoạn cũ. Gỡ hết, ai đọc lại thì thả lại.
+                    cu_tin.tims.all().delete()
             else:
                 WarMessage.objects.create(contest=ct, author=profile, parent=cha,
                                           kind=WarMessage.CHAT, body=noi_dung[:2000])
         return HttpResponseRedirect(request.get_full_path())
 
-    items = _war_danh_sach(key, chi_viec)
+    ten_truc_thi = _nguoi_truc_thi()
+    items = _gan_them_cho_tin(_war_danh_sach(key, chi_viec), request, ten_truc_thi)
 
-    cac_contest = list(Contest.objects.filter(war_messages__isnull=False)
-                       .values_list('key', flat=True).distinct())
+    # .order_by() rỗng + set(): xem chú thích cùng kiểu ở print_queue. Contest hiện
+    # không khai Meta.ordering nên chưa dính, nhưng chỉ cần upstream thêm một dòng
+    # ordering là menu này cũng đổ ra hàng trăm mục trùng mà không ai sửa gì ở đây.
+    cac_contest = sorted({k for k in Contest.objects.filter(war_messages__isnull=False)
+                          .order_by().values_list('key', flat=True).distinct() if k})
     # Tin đang được trả lời, để ô soạn hiện rõ mình đang trả lời ai.
     tra_loi_id = (request.GET.get('tra_loi') or '').strip()
     tra_loi = (WarMessage.objects.select_related('author__user')
@@ -1325,11 +1427,52 @@ def war_room(request):
         'cac_contest': cac_contest,
         'contest': key,
         'chi_viec': chi_viec,
+        'ten_truc_thi': ten_truc_thi,
         # Loại tin thu hồi cho khớp bộ lọc 'chỉ việc chưa xong', nếu không thì con số
         # trên đầu trang và danh sách bên dưới nói hai điều khác nhau.
         'con_viec': WarMessage.objects.filter(done=False, retracted=False,
                                               kind=WarMessage.BOT).count(),
     })
+
+
+@require_POST
+@user_passes_test(_co_quyen_truc_thi)
+def war_tim(request, pk):
+    """Thả tim hoặc bỏ tim một tin. Bấm lại là gỡ, không cần nút riêng.
+
+    Dùng get_or_create/delete chứ không đọc rồi ghi: hai tab cùng bấm thì cách đọc
+    trước ghi sau tạo ra hai bản ghi, mà ràng buộc duy nhất ở CSDL sẽ ném lỗi 500 vào
+    mặt người trực thi. IntegrityError ở đây nghĩa là người kia bấm trước, tức việc
+    đã xong rồi, nên nuốt là đúng chứ không phải giấu lỗi.
+    """
+    from django.db import IntegrityError
+    from django.http import JsonResponse
+    from django.utils.http import url_has_allowed_host_and_scheme
+    from hcmus.models import WarMessage, WarTim
+
+    # Tin đã thu hồi thì giao diện đã ẩn nút, nhưng khối tin nằm trên màn hình tới 30
+    # giây nên cú bấm cũ vẫn tới được. Chặn ở đây, không thì sinh ra dòng tim cho một
+    # tin không còn chỗ nào gỡ lại được.
+    m = get_object_or_404(WarMessage, pk=pk, retracted=False)
+    try:
+        doi, moi_tao = WarTim.objects.get_or_create(message=m, profile=request.profile)
+        if not moi_tao:
+            doi.delete()
+    except IntegrityError:
+        # Người kia bấm trước, tức việc đã xong. Nuốt là đúng chứ không phải giấu lỗi.
+        moi_tao = True
+    so = WarTim.objects.filter(message=m).count()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'so': so, 'cua_toi': moi_tao})
+
+    # Đường dự phòng khi không có JS. next phải là đường nội bộ: nhận thẳng giá trị
+    # người gửi là mở sẵn một cú chuyển hướng ra site lạ.
+    ve = request.POST.get('next') or ''
+    if not url_has_allowed_host_and_scheme(ve, allowed_hosts={request.get_host()},
+                                           require_https=request.is_secure()):
+        ve = reverse('hcmus_war_room')
+    return HttpResponseRedirect(ve)
 
 
 @require_POST
@@ -1392,10 +1535,17 @@ def print_queue(request):
     if contest:
         qs = qs.filter(contest__key=contest)
 
+    # .order_by() rỗng là BẮT BUỘC, không phải thừa. PrintRequest.Meta.ordering là
+    # ['-created'], mà Django thì thêm mọi cột trong order_by vào SELECT, nên
+    # .distinct() hoá ra lọc trùng trên cặp (room, created) chứ không trên room.
+    # Đã đo trên dữ liệu thật của kỳ thi: 177 mục đổ ra menu trong khi chỉ có 9 phòng
+    # và 1 kỳ thi. set() ở ngoài là lớp chắn thứ hai, phòng khi sau này ai đó bỏ
+    # .order_by() đi.
     tat_ca = PrintRequest.objects.all()
-    cac_phong = sorted(p for p in tat_ca.values_list('room', flat=True).distinct() if p)
-    cac_contest = sorted(k for k in tat_ca.exclude(contest=None)
-                         .values_list('contest__key', flat=True).distinct() if k)
+    cac_phong = sorted({p for p in tat_ca.order_by()
+                        .values_list('room', flat=True).distinct() if p})
+    cac_contest = sorted({k for k in tat_ca.exclude(contest=None).order_by()
+                          .values_list('contest__key', flat=True).distinct() if k})
     return render(request, 'hcmus/print-queue.html', {
         'title': _('Hàng đợi in bài'),
         'items': qs[:300],

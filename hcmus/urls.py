@@ -36,6 +36,7 @@ urlpatterns = [
     path('in-bai/<int:submission>/', views.print_submission, name='hcmus_print_submission'),
     path('phong-da-chien/', views.war_room, name='hcmus_war_room'),
     path('phong-da-chien/tin/', views.war_feed, name='hcmus_war_feed'),
+    path('phong-da-chien/<int:pk>/tim/', views.war_tim, name='hcmus_war_tim'),
     path('phong-da-chien/<int:pk>/<str:hanh_dong>/', views.war_action, name='hcmus_war_action'),
     path('hang-doi-in/', views.print_queue, name='hcmus_print_queue'),
     path('hang-doi-in/<int:pk>/tai-ve.pdf', views.print_download, name='hcmus_print_download'),

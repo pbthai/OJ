@@ -5,7 +5,7 @@
     <div class="war-phu" style="padding: 12px 0;">{{ _('Chưa có tin nào.') }}</div>
 {% endif %}
 {% for m in items %}
-<div class="war-tin{% if m.done %} war-xong{% endif %}" data-id="{{ m.id }}"
+<div class="war-tin{% if m.done %} war-xong{% endif %}{% if m.tag_toi %} war-tag-minh{% endif %}" data-id="{{ m.id }}"
      style="padding: 4px 2px; line-height: 1.5;">
     {# Phần nội dung phải nằm trong một bọc riêng, KHÔNG gộp chung với menu thao tác.
        Tin đã tích xong được làm mờ bằng opacity, mà opacity nhỏ hơn 1 tạo ra một
@@ -19,13 +19,22 @@
         {% if m.retracted %}
             <i class="war-phu">{{ _('đã xoá') }}</i>
         {% else %}
-            <span{% if m.noi_bat %} class="war-noibat"{% endif %}>{{ m.body }}</span>
+            <span{% if m.noi_bat %} class="war-noibat"{% endif %}>{{ m.than_html }}</span>
             {% if m.url %}<a href="{{ m.url }}" style="font-size: .85em;">{{ _('mở') }}</a>{% endif %}
         {% endif %}
         {% if m.done %}<span class="war-xongdau" style="font-size: .8em;">✓ {{ _('xong') }}</span>{% endif %}
     </span>
 
     {% if not m.retracted %}
+    {# Thả tim = "tôi đã đọc". Để NGOÀI .war-noi-dung nên tin đã tích xong vẫn bấm
+       được rõ ràng, và nằm cạnh tin chứ không nằm dưới cho đỡ tốn dòng. #}
+    <form method="post" action="{{ url('hcmus_war_tim', m.id) }}" style="display: inline;"
+          data-tim="{{ m.id }}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ duong_ve }}">
+        <button type="submit" class="war-tim{% if m.toi_da_tim %} war-tim-roi{% endif %}"
+                title="{% if m.toi_da_tim %}{{ _('Bỏ tim') }}{% else %}{{ _('Thả tim — báo là đã đọc') }}{% endif %}">♥<span class="war-tim-so">{% if m.so_tim %} {{ m.so_tim }}{% endif %}</span></button>
+    </form>
     {# Menu thả xuống thay cho dãy nút nằm dưới tin: dùng <details> nên không cần JS
        để mở đóng, chỉ cần một đoạn nhỏ để đóng menu khác khi mở một menu mới. #}
     <details class="war-menu">
