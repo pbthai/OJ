@@ -116,15 +116,35 @@ class Ranking(models.Model):
         PHÚT (judge/contest_format/icpc.py:70), format default tính bằng GIÂY.
         Cộng thẳng qua nhiều format là cộng nhầm đơn vị, nên phải cảnh báo.
         """
-        formats = {rc.contest.format_name for rc in self.contests.select_related('contest')}
-        return len(formats) > 1
+        don_vi = set()
+        for rc in self.contests.select_related('contest'):
+            don_vi.add(rc.don_vi_penalty_thuc)
+        return len(don_vi) > 1
 
 
 class RankingContest(models.Model):
+    PHUT = 'phut'
+    GIAY = 'giay'
+    DON_VI = ((PHUT, _('minutes (ICPC format)')), (GIAY, _('seconds (default format)')))
+
     ranking = models.ForeignKey(Ranking, on_delete=models.CASCADE, related_name='contests',
                                 verbose_name=_('ranking'))
+    # Để trống khi cột này là bảng nhập từ ngoài. Kỳ thi diễn ra trên MÁY KHÁC (máy
+    # thi) thì ở đây không có bản ghi Contest nào để trỏ tới, mà bảng vàng vẫn phải
+    # cộng được điểm vòng đó vào.
     contest = models.ForeignKey(Contest, on_delete=models.CASCADE, related_name='+',
-                                verbose_name=_('contest'))
+                                null=True, blank=True, verbose_name=_('contest'))
+    ten_ngoai = models.CharField(
+        max_length=150, blank=True, verbose_name=_('external round name'),
+        help_text=_('Fill this instead of picking a contest when the round was held on another '
+                    'server and the scoreboard was imported from a file.'))
+    diem_toi_da_ngoai = models.FloatField(
+        null=True, blank=True, verbose_name=_('external maximum score'),
+        help_text=_('Highest score obtainable in that round, e.g. the number of problems. Used '
+                    'for the problem setters rule.'))
+    don_vi_penalty = models.CharField(
+        max_length=4, choices=DON_VI, default=PHUT, verbose_name=_('external penalty unit'),
+        help_text=_('Unit of the penalty column in the imported file. ICPC counts minutes.'))
     weight = models.FloatField(default=1, verbose_name=_('weight'),
                                help_text=_('The contest score is multiplied by this.'))
     setters = models.ManyToManyField(
@@ -136,11 +156,29 @@ class RankingContest(models.Model):
     class Meta:
         verbose_name = _('ranking contest')
         verbose_name_plural = _('ranking contests')
+        # unique_together vẫn giữ cho cột trỏ contest thật. Với cột ngoài thì contest
+        # là NULL, mà trong SQL hai NULL không bằng nhau nên ràng buộc này không chặn
+        # được hai cột ngoài trùng tên — chỗ đó Form lo, xem admin.
         unique_together = ('ranking', 'contest')
         ordering = ['order', 'id']
 
+    @property
+    def la_ngoai(self):
+        return self.contest_id is None
+
+    @property
+    def ten_hien(self):
+        return self.ten_ngoai if self.la_ngoai else self.contest.name
+
+    @property
+    def don_vi_penalty_thuc(self):
+        """Đơn vị của cột penalty, dùng để cảnh báo khi trộn đơn vị."""
+        if self.la_ngoai:
+            return self.don_vi_penalty
+        return self.PHUT if self.contest.format_name == 'icpc' else self.GIAY
+
     def __str__(self):
-        return f'{self.contest.name} (×{self.weight:g})'
+        return f'{self.ten_hien} (×{self.weight:g})'
 
     @property
     def max_score(self):
@@ -150,8 +188,38 @@ class RankingContest(models.Model):
         chứ không dùng điểm của người đứng đầu: team ra đề thì không ai vượt được,
         và con số này không đổi khi có người nộp thêm bài.
         """
+        if self.la_ngoai:
+            return float(self.diem_toi_da_ngoai or 0)
         total = self.contest.contest_problems.aggregate(models.Sum('points'))['points__sum']
         return float(total or 0)
+
+
+class RankingDongNgoai(models.Model):
+    """Một dòng của bảng xếp hạng nhập từ ngoài vào.
+
+    Vì sao cần bảng riêng chứ không nhét JSON vào RankingContest: mỗi dòng phải ghép
+    được với một Profile thật trên máy này thì bảng vàng mới cộng điểm cho đúng đội.
+    Ghép bằng KHOÁ NGOẠI chứ không bằng chuỗi tên, vì đội có thể đổi tên hiển thị sau
+    kỳ thi, mà điểm đã nhập thì không được đổi theo.
+
+    `ten_doi` giữ nguyên tên trong file để còn truy lại được đã ghép từ đâu ra.
+    """
+    rc = models.ForeignKey(RankingContest, on_delete=models.CASCADE, related_name='dong_ngoai',
+                           verbose_name=_('ranking column'))
+    ten_doi = models.CharField(max_length=150, verbose_name=_('team name in the file'))
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='+',
+                                verbose_name=_('matched account'))
+    diem = models.FloatField(default=0, verbose_name=_('score'))
+    penalty = models.IntegerField(default=0, verbose_name=_('penalty'))
+
+    class Meta:
+        verbose_name = _('imported scoreboard row')
+        verbose_name_plural = _('imported scoreboard rows')
+        unique_together = ('rc', 'profile')
+        ordering = ['-diem', 'penalty']
+
+    def __str__(self):
+        return f'{self.ten_doi}: {self.diem:g}'
 
 
 class HomeSection(models.Model):
@@ -297,6 +365,22 @@ def _touch_ranking(ranking_id):
 @receiver([post_save, post_delete], sender=RankingContest)
 def _rc_changed(sender, instance, **kwargs):
     _touch_ranking(instance.ranking_id)
+
+
+@receiver([post_save, post_delete], sender='hcmus.RankingDongNgoai')
+def _dong_ngoai_changed(sender, instance, **kwargs):
+    """Sửa một dòng nhập từ ngoài cũng phải chạm Ranking.modified.
+
+    Cùng cái bẫy với RankingContest: compute_cached() khoá theo Ranking.modified, mà
+    dòng ngoài nằm ở model KHÁC nên lưu nó không tự đụng tới mốc đó.
+
+    Lưu ý: đường NHẬP dùng bulk_create, mà bulk_create KHÔNG phát post_save, nên
+    signal này không chạy ở đó. Đường nhập vẫn an toàn vì nó lưu RankingContest
+    ngay trước đó và _rc_changed chạm hộ. Signal này là lưới cho những lần sửa lẻ
+    một dòng, ví dụ qua trang quản trị.
+    """
+    _touch_ranking(RankingContest.objects.filter(id=instance.rc_id)
+                   .values_list('ranking_id', flat=True).first())
 
 
 @receiver(m2m_changed, sender=RankingContest.setters.through)

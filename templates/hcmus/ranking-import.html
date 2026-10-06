@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div style="max-width: 900px; margin-top: 12px;">
+    <h2 style="margin-bottom: 4px;">{{ _('Nhập bảng xếp hạng từ ngoài') }}</h2>
+    <div class="war-phu" style="margin-bottom: 14px;">
+        {{ _('Vào bảng vàng') }}
+        <a href="{{ url('hcmus_ranking_detail', ranking.slug) }}"><b>{{ ranking.name }}</b></a>.
+        {{ _('Dùng cho vòng thi diễn ra trên máy khác: xuất bảng xếp hạng ở máy đó rồi nhập vào đây.') }}
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;">
+            <div style="flex: 2 1 280px;">
+                <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Tên vòng thi') }}</label>
+                <input type="text" name="ten" value="{{ ten or '' }}" style="width: 100%;"
+                       placeholder="ICPC vòng cấp trường 2026">
+            </div>
+            <div style="flex: 0 1 110px;">
+                <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Hệ số') }}</label>
+                <input type="text" name="trong_so" value="{{ trong_so or 1 }}" style="width: 100%;">
+            </div>
+            <div style="flex: 0 1 130px;">
+                <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Điểm tối đa') }}</label>
+                <input type="text" name="diem_toi_da" value="{{ diem_toi_da or '' }}" style="width: 100%;">
+            </div>
+            <div style="flex: 0 1 160px;">
+                <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Đơn vị penalty') }}</label>
+                <select name="don_vi" style="width: 100%;">
+                    <option value="phut" {% if don_vi != 'giay' %}selected{% endif %}>{{ _('phút (ICPC)') }}</option>
+                    <option value="giay" {% if don_vi == 'giay' %}selected{% endif %}>{{ _('giây') }}</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-top: 12px;">
+            <label style="display: block; font-size: .85em; font-weight: 600;">{{ _('Tệp CSV') }}</label>
+            <input type="file" name="file" accept=".csv,text/csv,text/plain">
+            <div class="war-phu" style="font-size: .85em; margin-top: 4px;">
+                {{ _('Hoặc dán thẳng nội dung vào ô dưới. Cột bắt buộc: ten_doi, diem. Cột penalty không bắt buộc.') }}
+            </div>
+        </div>
+        <textarea name="noi_dung" rows="8" style="width: 100%; margin-top: 6px; font-family: monospace;"
+                  placeholder="# ten=ICPC vòng cấp trường 2026&#10;# diem_toi_da=12&#10;# don_vi_penalty=phut&#10;ten_doi,diem,penalty&#10;HCMUS-StarterTrio,7,834">{{ noi_dung or '' }}</textarea>
+
+        <div style="margin-top: 10px;">
+            <button type="submit" class="button">{{ _('Xem trước') }}</button>
+            {% if khop %}
+                <button type="submit" name="that_su_nhap" value="1" class="button"
+                        style="margin-left: 8px;">{{ _('Nhập %(n)d đội vào bảng vàng', n=khop|length) }}</button>
+            {% endif %}
+        </div>
+
+    {% if loi %}
+        <div class="war-dai war-dai-cho" style="padding: 10px 14px; margin-top: 14px;">
+            <b>{{ _('Có vấn đề trong tệp') }}</b>
+            <ul style="margin: 6px 0 0 18px;">{% for e in loi %}<li>{{ e }}</li>{% endfor %}</ul>
+        </div>
+    {% endif %}
+
+    {% if da_doc %}
+        <h3 style="margin-top: 20px;">{{ _('Xem trước') }}</h3>
+        <p class="war-phu" style="font-size: .9em;">
+            {{ _('Ghép theo tên đội, bỏ qua hoa thường và khoảng trắng thừa. Chỉ nhận những đội đang có trên bảng vàng.') }}
+        </p>
+
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1 1 280px;">
+                <h4>{{ _('Ghép được') }} ({{ khop|length }})</h4>
+                <table class="table" style="width: 100%;">
+                    <tr><th>{{ _('Tên trong tệp') }}</th><th>{{ _('Tài khoản') }}</th><th>{{ _('Điểm') }}</th><th>{{ _('Penalty') }}</th></tr>
+                    {% for d in khop %}
+                        <tr><td>{{ d.ten_doi }}</td><td>{{ d.profile.user.username }}</td>
+                            <td>{{ d.diem }}</td><td>{{ d.penalty }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <div style="flex: 1 1 280px;">
+                <h4>{{ _('Bỏ qua') }} ({{ khong_khop|length }})</h4>
+                {% if khong_khop %}
+                    <table class="table" style="width: 100%;">
+                        <tr><th>{{ _('Tên trong tệp') }}</th><th>{{ _('Điểm') }}</th><th>{{ _('Lý do') }}</th></tr>
+                        {% for d in khong_khop %}
+                            <tr><td>{{ d.ten_doi }}</td><td>{{ d.diem }}</td><td>{{ d.ly_do }}</td></tr>
+                        {% endfor %}
+                    </table>
+                {% else %}<p class="war-phu">{{ _('Không có.') }}</p>{% endif %}
+
+                <h4 style="margin-top: 14px;">{{ _('Đội trên bảng vàng không có trong tệp') }} ({{ thieu|length }})</h4>
+                {% if thieu %}
+                    <p class="war-phu" style="font-size: .9em;">
+                        {{ _('Chưa ghép thì tính là vắng mặt. Tên đội gõ tay ở hai máy nên hay lệch một hai ký tự — chọn đúng dòng trong tệp rồi bấm Xem trước lại.') }}
+                    </p>
+                    <table class="table" style="width: 100%;">
+                        <tr><th>{{ _('Đội trên bảng vàng') }}</th><th>{{ _('Ghép với dòng nào trong tệp') }}</th></tr>
+                        {% for t in thieu %}
+                            <tr>
+                                <td>{{ t.ten }}</td>
+                                <td>
+                                    <select name="ghep_{{ t.profile.id }}" style="width: 100%;">
+                                        <option value="">{{ _('— không ghép —') }}</option>
+                                        {% for g in t.goi_y %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+                                        {% for d in khong_khop %}
+                                            {% if d.ten_doi not in t.goi_y %}<option value="{{ d.ten_doi }}">{{ d.ten_doi }}</option>{% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </table>
+                {% else %}<p class="war-phu">{{ _('Không có, mọi đội đều có mặt.') }}</p>{% endif %}
+            </div>
+        </div>
+
+        <div style="margin-top: 14px;">
+            <button type="submit" class="button">{{ _('Xem trước lại với các ghép tay ở trên') }}</button>
+            {% if khop %}
+                <button type="submit" name="that_su_nhap" value="1" class="button"
+                        style="margin-left: 8px;">{{ _('Nhập %(n)d đội vào bảng vàng', n=khop|length) }}</button>
+            {% endif %}
+        </div>
+    {% endif %}
+    </form>
+</div>
+{% endblock %}

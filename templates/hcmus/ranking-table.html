@@ -16,7 +16,9 @@
             <th>{{ _('Penalty') }}</th>
             {% if not compact %}{% for rc in ranking_contests %}
                 <th>
-                    <a href="{{ url('contest_view', rc.contest.key) }}">{{ rc.contest.name }}</a>
+                    {# Cột nhập từ ngoài không có contest trên máy này nên không có link để trỏ tới. #}
+                    {% if rc.la_ngoai %}{{ rc.ten_ngoai }}
+                    {% else %}<a href="{{ url('contest_view', rc.contest.key) }}">{{ rc.contest.name }}</a>{% endif %}
                     <br><span class="rk-pen">×{{ rc.weight|floatformat }}</span>
                 </th>
             {% endfor %}{% endif %}

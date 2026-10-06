@@ -1828,3 +1828,235 @@ def landing_page(request, slug):
         # File trọn vẹn tải lên: trả nguyên văn, không nhét vào khung site.
         return HttpResponse(page.html)
     return render(request, 'hcmus/landing.html', {'title': page.title, 'page': page})
+
+
+# ---------------------------------------------------------------- nhập bảng xếp hạng ngoài
+
+def _doc_bang_ngoai(noi_dung):
+    """Đọc file bảng xếp hạng nhập vào. Trả về (meta, danh sách dòng, lỗi).
+
+    Định dạng CSV, cho phép khối chú thích mở đầu bằng dấu thăng để file tự mô tả
+    chính nó:
+
+        # ten=ICPC - VNUHCM University of Science contest
+        # diem_toi_da=12
+        # don_vi_penalty=phut
+        ten_doi,diem,penalty
+        HCMUS-sadthu,7,834
+
+    Khối chú thích là tuỳ chọn; thiếu thì người nhập tự điền trên form. Có nó thì đỡ
+    phải nhớ số bài của một kỳ thi diễn ra ở máy khác.
+    """
+    import csv as _csv
+    import io as _io
+
+    meta, than = {}, []
+    for dong in noi_dung.splitlines():
+        if dong.startswith('#'):
+            if '=' in dong:
+                k, v = dong[1:].split('=', 1)
+                meta[k.strip()] = v.strip()
+            continue
+        than.append(dong)
+    if not than:
+        return meta, [], ['File rỗng, không có dòng dữ liệu nào.']
+
+    doc = _csv.DictReader(_io.StringIO('\n'.join(than)))
+    truong = {(c or '').strip().lower() for c in (doc.fieldnames or [])}
+    thieu = {'ten_doi', 'diem'} - truong
+    if thieu:
+        return meta, [], [f'Thiếu cột bắt buộc: {", ".join(sorted(thieu))}. '
+                          f'Cột đang có: {", ".join(sorted(truong)) or "(không có)"}']
+
+    ra, loi = [], []
+    for i, d in enumerate(doc, 2):
+        d = {(k or '').strip().lower(): (v or '').strip() for k, v in d.items()}
+        ten = d.get('ten_doi', '')
+        if not ten:
+            continue
+        try:
+            diem = float(d.get('diem') or 0)
+        except ValueError:
+            loi.append(f'Dòng {i}: điểm "{d.get("diem")}" không phải số.')
+            continue
+        try:
+            pen = int(float(d.get('penalty') or 0))
+        except ValueError:
+            loi.append(f'Dòng {i}: penalty "{d.get("penalty")}" không phải số.')
+            continue
+        ra.append({'ten_doi': ten, 'diem': diem, 'penalty': pen})
+    return meta, ra, loi
+
+
+def _chuan_hoa_ten(t):
+    """Khoá so khớp tên đội: bỏ dấu, bỏ hoa thường, gộp khoảng trắng.
+
+    Bỏ dấu là cần, không phải tiện: tên đội gõ tay ở hai máy khác nhau nên cùng một
+    đội ra `LHP-ThePokédex` ở máy này và `LHP-ThePokedex` ở máy kia. Đã gặp thật.
+    Chỉ chuẩn hoá tới đây thôi, không so khớp mờ: đoán sai một đội là cộng điểm của
+    đội này cho đội khác, mà bảng vàng thì không ai soát lại từng dòng.
+    """
+    import unicodedata
+    t = unicodedata.normalize('NFD', t or '')
+    t = ''.join(c for c in t if unicodedata.category(c) != 'Mn')
+    return ' '.join(t.split()).lower()
+
+
+def _ghep_doi(ranking, dong, thu_cong=None):
+    """Ghép tên đội trong file với các đội ĐANG CÓ trên bảng vàng.
+
+    `thu_cong` là {profile_id: tên trong file} do người nhập chọn tay ở bước xem
+    trước, cho những đội lệch tên quá mức chuẩn hoá tự lo được. Ghép tay được ưu
+    tiên tuyệt đối: người nhìn hai cái tên rồi quyết thì chắc hơn mọi luật tự động.
+
+    Đội trên bảng vàng mà file không có thì nằm trong `thieu` — phần tính điểm tự
+    coi là vắng mặt, đúng như với contest nội bộ.
+    """
+    import difflib
+
+    doi = list(ranking.teams.select_related('user'))
+    bang, trung = {}, set()
+    for p in doi:
+        k = _chuan_hoa_ten(p.user.first_name or p.user.username)
+        if k in bang:
+            trung.add(k)
+        bang[k] = p
+
+    thu_cong = thu_cong or {}
+    theo_ten = {}
+    for d in dong:
+        theo_ten.setdefault(_chuan_hoa_ten(d['ten_doi']), d)
+
+    khop, khong_khop = [], []
+    da_dung, da_lay = set(), set()
+
+    for pid, ten in thu_cong.items():
+        d = theo_ten.get(_chuan_hoa_ten(ten))
+        p = next((x for x in doi if x.id == pid), None)
+        if d is None or p is None or p.id in da_dung:
+            continue
+        da_dung.add(p.id)
+        da_lay.add(_chuan_hoa_ten(d['ten_doi']))
+        khop.append(dict(d, profile=p, ghep_tay=True))
+
+    for d in dong:
+        k = _chuan_hoa_ten(d['ten_doi'])
+        if k in da_lay:
+            continue
+        p = bang.get(k)
+        if p is None or k in trung:
+            khong_khop.append(dict(d, ly_do='tên trùng nhau trên bảng vàng' if k in trung
+                                   else 'không có đội này trên bảng vàng'))
+            continue
+        if p.id in da_dung:
+            khong_khop.append(dict(d, ly_do='file có hai dòng cùng một đội'))
+            continue
+        da_dung.add(p.id)
+        khop.append(dict(d, profile=p, ghep_tay=False))
+
+    con_lai = [d['ten_doi'] for d in khong_khop]
+    thieu = []
+    for p in doi:
+        if p.id in da_dung:
+            continue
+        ten = p.user.first_name or p.user.username
+        thieu.append({'profile': p, 'ten': ten,
+                      'goi_y': difflib.get_close_matches(ten, con_lai, n=3, cutoff=0.7)})
+    return khop, khong_khop, thieu
+
+
+def _co_quyen_sua_bang(user, ranking):
+    return user.is_superuser or (user.has_perm('hcmus.change_ranking')
+                                 and (ranking.creator_id is None
+                                      or ranking.creator_id == user.profile.id))
+
+
+@login_required
+def ranking_import(request, slug):
+    """Nhập một bảng xếp hạng từ máy khác vào bảng vàng, có bước xem trước.
+
+    Xem trước là bắt buộc chứ không phải cho đẹp: ghép theo TÊN ĐỘI gõ tay ở hai máy
+    khác nhau, nên luôn có đội lệch tên. Ghi thẳng rồi mới phát hiện thì bảng vàng đã
+    sai mất một vòng, mà không ai soát lại từng dòng.
+    """
+    from django.contrib import messages
+    from django.db import transaction
+    from hcmus.models import Ranking, RankingContest, RankingDongNgoai
+
+    ranking = get_object_or_404(Ranking, slug=slug)
+    if not _co_quyen_sua_bang(request.user, ranking):
+        raise PermissionDenied()
+
+    ctx = {'title': _('Nhập bảng xếp hạng từ ngoài'), 'ranking': ranking}
+    if request.method != 'POST':
+        return render(request, 'hcmus/ranking-import.html', ctx)
+
+    noi_dung = ''
+    if request.FILES.get('file'):
+        noi_dung = request.FILES['file'].read().decode('utf-8-sig', 'replace')
+    else:
+        noi_dung = request.POST.get('noi_dung') or ''
+    meta, dong, loi = _doc_bang_ngoai(noi_dung)
+
+    ten = (request.POST.get('ten') or meta.get('ten') or '').strip()
+    try:
+        trong_so = float(request.POST.get('trong_so') or meta.get('trong_so') or 1)
+    except ValueError:
+        trong_so = 1.0
+        loi.append('Trọng số không phải số, tạm lấy 1.')
+    try:
+        diem_toi_da = float(request.POST.get('diem_toi_da') or meta.get('diem_toi_da') or 0)
+    except ValueError:
+        diem_toi_da = 0.0
+        loi.append('Điểm tối đa không phải số, tạm lấy 0.')
+    don_vi = (request.POST.get('don_vi') or meta.get('don_vi_penalty')
+              or RankingContest.PHUT).strip()
+    if don_vi not in (RankingContest.PHUT, RankingContest.GIAY):
+        don_vi = RankingContest.PHUT
+
+    # Ghép tay người nhập chọn ở lượt xem trước trước đó, gửi lại qua form.
+    thu_cong = {}
+    for k, v in request.POST.items():
+        if k.startswith('ghep_') and v.strip():
+            try:
+                thu_cong[int(k[5:])] = v.strip()
+            except ValueError:
+                pass
+    khop, khong_khop, thieu = (_ghep_doi(ranking, dong, thu_cong) if dong else ([], [], []))
+    ctx.update(noi_dung=noi_dung, ten=ten, trong_so=trong_so, diem_toi_da=diem_toi_da,
+               don_vi=don_vi, loi=loi, khop=khop, khong_khop=khong_khop, thieu=thieu,
+               da_doc=True)
+
+    if request.POST.get('that_su_nhap') != '1':
+        return render(request, 'hcmus/ranking-import.html', ctx)
+
+    if not ten:
+        ctx['loi'] = loi + ['Phải đặt tên cho cột này.']
+        return render(request, 'hcmus/ranking-import.html', ctx)
+    if not khop:
+        ctx['loi'] = loi + ['Không ghép được đội nào, chưa ghi gì cả.']
+        return render(request, 'hcmus/ranking-import.html', ctx)
+
+    with transaction.atomic():
+        rc, moi = RankingContest.objects.get_or_create(
+            ranking=ranking, contest=None, ten_ngoai=ten,
+            defaults={'weight': trong_so, 'diem_toi_da_ngoai': diem_toi_da,
+                      'don_vi_penalty': don_vi,
+                      'order': (ranking.contests.count() + 1) * 10})
+        if not moi:
+            # Nhập lại cùng một tên là THAY, không phải cộng dồn: nhập lại thường là
+            # vì file trước sai, mà cộng dồn thì điểm nhân đôi lặng lẽ.
+            rc.weight = trong_so
+            rc.diem_toi_da_ngoai = diem_toi_da
+            rc.don_vi_penalty = don_vi
+            rc.save(update_fields=['weight', 'diem_toi_da_ngoai', 'don_vi_penalty'])
+            rc.dong_ngoai.all().delete()
+        RankingDongNgoai.objects.bulk_create([
+            RankingDongNgoai(rc=rc, ten_doi=d['ten_doi'], profile=d['profile'],
+                             diem=d['diem'], penalty=d['penalty'])
+            for d in khop], batch_size=200)
+
+    messages.success(request, f'Đã nhập {len(khop)} đội vào cột "{ten}" (×{trong_so:g}). '
+                              f'Bỏ qua {len(khong_khop)} dòng không khớp, '
+                              f'{len(thieu)} đội trên bảng vàng không có trong file.')
+    return HttpResponseRedirect(reverse('hcmus_ranking_detail', args=[ranking.slug]))

@@ -15,6 +15,7 @@ urlpatterns = [
     path('suc-khoe/data.json', views.health_data, name='hcmus_health_data'),
     path('suc-khoe/may-cham/<str:name>/', views.health_judge_toggle, name='hcmus_judge_toggle'),
     path('bang-vang/', views.ranking_list, name='hcmus_ranking_list'),
+    path('bang-vang/<slug:slug>/nhap/', views.ranking_import, name='hcmus_ranking_import'),
     path('bang-vang/<slug:slug>/', views.ranking_detail, name='hcmus_ranking_detail'),
     # Giữ link cũ /xep-hang/ sống: chuyển hướng vĩnh viễn sang /bang-vang/.
     path('xep-hang/', RedirectView.as_view(pattern_name='hcmus_ranking_list', permanent=True)),

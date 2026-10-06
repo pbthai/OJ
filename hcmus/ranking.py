@@ -23,6 +23,10 @@ Bốn cái bẫy trong dữ liệu, bỏ qua cái nào cũng cho ra bảng sai:
    tính bằng GIÂY. Cộng penalty qua nhiều contest khác format là cộng nhầm đơn vị
    — xem Ranking.mixed_penalty_units, giao diện phải cảnh báo.
 
+5. Cột nhập từ ngoài (kỳ thi diễn ra trên máy khác) có contest_id là NULL. Khoá
+   tra cứu phải là (rc.id, team.id) chứ KHÔNG phải (contest_id, team.id): hai cột
+   ngoài cùng cho khoá (None, uid) và cột sau sẽ đè kết quả của cột trước.
+
 Team RA ĐỀ một contest (RankingContest.setters) được điểm tối đa và penalty 0 cho
 contest đó mà không cần thi. Ưu tiên này đặt TRƯỚC mọi thứ khác: người ra đề có
 thể vẫn có participation (vào xem, thi thử) với điểm thấp, và điểm đó không được
@@ -38,7 +42,8 @@ def compute(ranking):
     cells song song với danh sách contest, mỗi ô:
         {participated, score, weighted, penalty}
     """
-    rcs = list(ranking.contests.select_related('contest').prefetch_related('setters').all())
+    rcs = list(ranking.contests.select_related('contest')
+               .prefetch_related('setters', 'dong_ngoai').all())
     # prefetch organizations: thiếu nó thì mỗi team một truy vấn riêng
     # (đo thật: 48 team -> 53 truy vấn, 52ms; có prefetch -> 6 truy vấn, 19ms)
     teams = list(ranking.teams.select_related('user').prefetch_related('organizations').all())
@@ -46,13 +51,25 @@ def compute(ranking):
         return [], rcs
 
     # Một truy vấn cho toàn bảng, không phải mỗi team một lần
-    rows = (ContestParticipation.objects
-            .filter(contest_id__in=[rc.contest_id for rc in rcs],
-                    user_id__in=[t.id for t in teams],
-                    virtual=ContestParticipation.LIVE,
-                    is_disqualified=False)
-            .values_list('contest_id', 'user_id', 'score', 'cumtime'))
-    data = {(cid, uid): (score, cumtime) for cid, uid, score, cumtime in rows}
+    cid_that = [rc.contest_id for rc in rcs if rc.contest_id is not None]
+    data = {}
+    if cid_that:
+        rows = (ContestParticipation.objects
+                .filter(contest_id__in=cid_that,
+                        user_id__in=[t.id for t in teams],
+                        virtual=ContestParticipation.LIVE,
+                        is_disqualified=False)
+                .values_list('contest_id', 'user_id', 'score', 'cumtime'))
+        data = {(cid, uid): (score, cumtime) for cid, uid, score, cumtime in rows}
+
+    # Cột nhập từ ngoài: điểm nằm sẵn trong bảng dòng ngoài, đã ghép với Profile lúc
+    # nhập. Khoá theo rc.id chứ không theo contest_id, vì contest_id của chúng là NULL
+    # và mọi cột ngoài sẽ đụng nhau ở khoá (None, uid).
+    ngoai = {}
+    for rc in rcs:
+        if rc.la_ngoai:
+            for d in rc.dong_ngoai.all():
+                ngoai[(rc.id, d.profile_id)] = (d.diem, d.penalty)
 
     setter_ids = {rc.id: {p.id for p in rc.setters.all()} for rc in rcs}
     max_scores = {rc.id: rc.max_score for rc in rcs}
@@ -73,7 +90,8 @@ def compute(ranking):
                 total += weighted
                 continue
 
-            hit = data.get((rc.contest_id, team.id))
+            hit = (ngoai.get((rc.id, team.id)) if rc.la_ngoai
+                   else data.get((rc.contest_id, team.id)))
             if hit is None:
                 weighted = ranking.absent_score * rc.weight
                 cells.append({'participated': False, 'setter': False, 'score': None,

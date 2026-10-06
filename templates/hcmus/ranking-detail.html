@@ -7,6 +7,7 @@
 {% block body %}
     {% if can_edit %}
         <p style="text-align: right">
+            <a href="{{ url('hcmus_ranking_import', ranking.slug) }}" class="button">{{ _('Import a scoreboard') }}</a>
             <a href="{{ url('admin:hcmus_ranking_change', ranking.id) }}" class="button">{{ _('Edit') }}</a>
         </p>
     {% endif %}

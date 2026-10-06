@@ -56,11 +56,38 @@ class RankingContestInlineForm(ModelForm):
             self.fields['setters'].queryset = Profile.objects.select_related('user')
             self.fields['setters'].widget.can_add_related = False
 
+    def clean(self):
+        """Một cột phải là MỘT trong hai: kỳ thi trên máy này, hoặc bảng nhập từ ngoài.
+
+        Ràng buộc unique_together ở CSDL không gác được chỗ này: với cột ngoài thì
+        contest là NULL, mà trong SQL hai NULL không bằng nhau, nên hai cột ngoài
+        trùng tên vẫn lọt qua và bảng vàng sẽ có hai cột y hệt.
+        """
+        cleaned = super().clean()
+        contest = cleaned.get('contest')
+        ten = (cleaned.get('ten_ngoai') or '').strip()
+        if contest and ten:
+            raise forms.ValidationError(
+                _('Pick a contest or name an external round, not both.'))
+        if not contest and not ten:
+            raise forms.ValidationError(
+                _('Pick a contest, or name an external round whose scoreboard you imported.'))
+        if ten:
+            trung = RankingContest.objects.filter(ranking=cleaned.get('ranking'),
+                                                  contest=None, ten_ngoai=ten)
+            if self.instance.pk:
+                trung = trung.exclude(pk=self.instance.pk)
+            if trung.exists():
+                raise forms.ValidationError({'ten_ngoai': _('This ranking already has a column '
+                                                            'with that name.')})
+        return cleaned
+
 
 class RankingContestInline(admin.TabularInline):
     model = RankingContest
     form = RankingContestInlineForm
-    fields = ('contest', 'weight', 'setters', 'order')
+    fields = ('contest', 'ten_ngoai', 'diem_toi_da_ngoai', 'don_vi_penalty',
+              'weight', 'setters', 'order')
     verbose_name = _('contest')
     verbose_name_plural = _('contests used for this ranking')
     extra = 1
