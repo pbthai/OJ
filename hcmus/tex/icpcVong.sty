@@ -1,0 +1,71 @@
+%
+% icpcVong.sty — bản icpcHCMUS có mọi thứ đổi theo từng vòng thi khai ở ĐẦU file.
+%
+% Vì sao có file này: icpcHCMUS.sty dài hơn 600 dòng, mà thứ cần đổi khi chuyển từ
+% vòng cấp trường sang vòng miền Nam chỉ là mấy cái logo. Lần trước muốn đổi phải dò
+% xuống quãng dòng 590 tìm \fancyhead giữa một rừng macro. File này gom hết lên đầu.
+%
+% KHÔNG chép lại thân của icpcHCMUS.sty mà \RequirePackage nó. Chép ra hai bản thì
+% hai bản sẽ lệch nhau, và lần sửa sau sẽ sửa nhầm bản không dùng.
+%
+% License: https://github.com/GassaFM/olymp.sty/blob/master/LICENSE
+% Authors:  https://github.com/GassaFM/olymp.sty/blob/master/AUTHORS
+%
+
+\ProvidesPackage{icpcVong}[2026/10/14 ICPC statement style, per-round settings on top]
+
+
+% =====================================================================
+% KHAI BÁO CHO TỪNG VÒNG THI — chỉ cần sửa trong khối này
+% =====================================================================
+%
+% Dùng \providecommand chứ không \def, nên file .tex có thể khai đè TRƯỚC khi
+% \usepackage{icpcVong}, không phải sửa file này. Ví dụ cho vòng miền Nam:
+%
+%     \newcommand{\LogoPhai}{ICPCMienNamlogo.png}
+%     \newcommand{\BannerBia}{bannerMienNam.png}
+%     \usepackage{icpcVong}
+%
+% Ảnh phải nằm trong OJ/hcmus/tex/ — bộ sinh chép cả thư mục đó sang chỗ biên dịch.
+
+% Hai logo ở đầu MỖI trang đề
+\providecommand{\LogoTrai}{HCMUSlogo.png}     % góc trái: đơn vị đăng cai
+\providecommand{\LogoPhai}{ICPClogo.png}      % góc phải: ICPC Foundation
+\providecommand{\RongLogoHeader}{1.7cm}
+
+% Ảnh lớn giữa TRANG BÌA
+\providecommand{\LogoBia}{HCMUSlogo.png}
+\providecommand{\RongLogoBia}{0.7\textwidth}
+
+% Banner ngang trên cùng trang bìa. Để TRỐNG là không có banner.
+% Đặt tên file vào đây khi ban tổ chức phát hành banner riêng của vòng thi.
+\providecommand{\BannerBia}{}
+\providecommand{\RongBannerBia}{\textwidth}
+
+% =====================================================================
+% Hết phần khai báo. Từ đây trở xuống không cần sửa khi đổi vòng thi.
+% =====================================================================
+
+
+% Mượn nguyên thân của icpcHCMUS: mọi macro đề bài, ví dụ, subtask, lề, cỡ chữ.
+% Nó cũng đã \pagestyle{fancy} và đặt \fancyhead/\fancyfoot sẵn; phần dưới chỉ ghi
+% đè đúng ba ô header cho dùng macro ở trên.
+\RequirePackage{icpcHCMUS}
+
+\fancyhead[L]{\includegraphics[width=\RongLogoHeader]{\LogoTrai}}
+\fancyhead[C]{\textbf{\protect\contestname}}
+\fancyhead[R]{\includegraphics[width=\RongLogoHeader]{\LogoPhai}}
+
+% Khối ảnh của trang bìa. Bộ sinh gọi \AnhTrangBia thay vì tự \includegraphics, nên
+% đổi banner hay logo bìa không phải đụng vào bộ sinh.
+%
+% \ifx\BannerBia\empty không dùng được vì \BannerBia là lệnh chứ không phải chuỗi;
+% so sánh với một lệnh rỗng đã khai sẵn mới đúng.
+\newcommand{\@BannerRong}{}
+\newcommand{\AnhTrangBia}{%
+    \ifx\BannerBia\@BannerRong
+    \else
+        \includegraphics[width=\RongBannerBia]{\BannerBia}\par\vspace{0.6cm}%
+    \fi
+    \includegraphics[width=\RongLogoBia]{\LogoBia}%
+}

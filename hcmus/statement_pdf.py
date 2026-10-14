@@ -50,12 +50,25 @@ TEX_ASSETS = os.path.join(BASE, 'tex')
 # .sty đi kèm sẵn. Tên -> mô tả ngắn hiện trên form.
 BUNDLED_STY = {
     'icpcHCMUS.sty': 'ICPC style của HCMUS (mặc định) — có logo trường, hiện Memory limit',
+    'icpcVong.sty': 'ICPC theo vòng thi — như icpcHCMUS nhưng logo và banner khai ở đầu file, '
+                    'đổi vòng thi chỉ sửa mấy dòng đầu',
     'icpc.sty': 'ICPC style gốc — logo ICPC hai bên, ẩn Memory limit',
     'olpHCMUS.sty': 'Olympic Tin học — tiêu đề tiếng Việt, có mục Hướng dẫn giải',
 }
 DEFAULT_STY = 'icpcHCMUS.sty'
 
-LOGOS = ('HCMUSlogo.png', 'ICPClogo.png')
+# Chép MỌI ảnh trong tex/ chứ không liệt kê cứng: thêm logo của một vòng thi mới
+# chỉ cần thả file vào thư mục đó, không phải sửa thêm chỗ nào ở đây. Thư mục này do
+# mình quản, không phải chỗ người dùng tải lên, nên quét cả thư mục là an toàn.
+ANH_DUOI = ('.png', '.jpg', '.jpeg', '.pdf', '.eps')
+
+
+def _anh_di_kem():
+    try:
+        return [f for f in sorted(os.listdir(TEX_ASSETS))
+                if f.lower().endswith(ANH_DUOI)]
+    except OSError:
+        return []
 
 # Giới hạn tài nguyên cho MỘT lượt pdflatex. Bộ đề thật 12 bài build hết 3,6s
 # (đo trên server), nên 30s đã là dư gấp chục lần cho bộ đề lớn hơn nhiều.
@@ -534,6 +547,12 @@ MASTER = r"""\documentclass[12pt,a4paper,oneside]{article}
 %% mục Input/Output vốn không đánh số.
 \setcounter{secnumdepth}{0}
 
+%% Mặc định cho các style KHÔNG khai mấy macro này (icpcHCMUS, icpc, olpHCMUS).
+%% \providecommand nên style nào đã khai rồi thì giữ nguyên bản của nó.
+\providecommand{\LogoBia}{HCMUSlogo.png}
+\providecommand{\RongLogoBia}{0.7\textwidth}
+\providecommand{\AnhTrangBia}{\includegraphics[width=\RongLogoBia]{\LogoBia}}
+
 \contest{%(contest)s}{}{}
 
 \begin{document}
@@ -541,7 +560,7 @@ MASTER = r"""\documentclass[12pt,a4paper,oneside]{article}
 
 \begin{center}
 
-\includegraphics[width=0.7\textwidth]{HCMUSlogo.png}
+\AnhTrangBia
 
 \textbf{\Large \thecontestname}
 
@@ -732,8 +751,20 @@ def generate(contest_key, sty_name=DEFAULT_STY, sty_upload=None, lang=None,
 
     workdir = tempfile.mkdtemp(prefix='hcmus-stmt-')
     try:
-        for logo in LOGOS:
-            shutil.copy(os.path.join(TEX_ASSETS, logo), workdir)
+        for anh in _anh_di_kem():
+            shutil.copy(os.path.join(TEX_ASSETS, anh), workdir)
+
+        # Chép TẤT CẢ .sty đi kèm chứ không chỉ cái được chọn: icpcVong.sty
+        # \RequirePackage{icpcHCMUS} để khỏi chép lại 600 dòng thân, mà pdflatex chạy
+        # trong thư mục tạm nên không thấy file nào mình không chép sang. Thiếu bước
+        # này thì chọn icpcVong là biên dịch chết với "File icpcHCMUS.sty not found".
+        for ten in BUNDLED_STY:
+            if ten == sty_name:
+                continue        # cái được chọn xử lý riêng ở dưới, có thể là bản tải lên
+            with open(os.path.join(TEX_ASSETS, ten), encoding='utf-8') as f:
+                phu, _ = patch_sty_compat(f.read())
+            with open(os.path.join(workdir, ten), 'w', encoding='utf-8') as f:
+                f.write(phu)
 
         sty_patched = 0
         if sty_upload:
